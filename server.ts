@@ -5,11 +5,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { initDatabase, getConfiguracoes, updateConfiguracoes, registrarLog, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId } from './database';
+import { initDatabase, getConfiguracoes, updateConfiguracoes, registrarLog, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas } from './database';
 import { conectarEvolutionAPI, qrCodeBase64, sessionStatus, handleWhatsAppWebhook, enviarMensagemWhatsApp } from './whatsappBot';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
-import { rotasAtivas } from './operacao';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,9 +125,6 @@ export async function startServer() {
             return reply.code(500).type('application/json; charset=utf-8').send({ error: 'A IA não conseguiu analisar os endereços desta rota.' });
         }
 
-        pedidos.forEach((p: any) => {
-            rotasAtivas.push({ pacoteId, telegram_id: motoboy.telegram_id, pedido: p });
-        });
 
         const totalTaxa = pedidos.reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
         const msgMotoboy = `🚀 *NOVA ROTA DE ENTREGA!*\n\n*Setor:* ${resumoBairros}\n*Qtd:* ${pedidos.length} entregas\n*Total a Faturar:* R$ ${totalTaxa.toFixed(2)}`;
@@ -156,12 +152,31 @@ export async function startServer() {
 
     app.post('/api/operacao/baixa', async (request: any, reply) => {
         const { pedidoId } = request.body;
-        const idx = rotasAtivas.findIndex(r => r.pedido.id === pedidoId);
-        if (idx > -1) {
-            const rota = rotasAtivas[idx];
-            await registrarEntrega(rota.telegram_id, rota.pedido.taxa);
-            rotasAtivas.splice(idx, 1);
-            await broadcastLog('FINANCEIRO', `Baixa manual concluída. Taxa de R$${rota.pedido.taxa.toFixed(2)} faturada.`);
+        
+        const pacotesRaw = await getPacotes();
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pedidosRaw = await getPedidos();
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+
+        let rotaInfo: any = null;
+        const pacotesAtivos = pacotes.filter((p: any) => p.status === 'PENDENTE_ACEITE' || p.status === 'EM_ROTA');
+
+        findRota:
+        for (const pacote of pacotesAtivos) {
+            for (const pId of pacote.pedidosIds) {
+                if (pId === pedidoId) {
+                    const pedido = pedidos.find((p: any) => p.id === pedidoId);
+                    if (pedido) {
+                        rotaInfo = { telegram_id: pacote.motoboy.telegram_id, pedido: pedido };
+                        break findRota;
+                    }
+                }
+            }
+        }
+
+        if (rotaInfo) {
+            await registrarEntrega(rotaInfo.telegram_id, rotaInfo.pedido.taxa);
+            await broadcastLog('FINANCEIRO', `Baixa manual concluída. Taxa de R$${(rotaInfo.pedido.taxa || 0).toFixed(2)} faturada.`);
         }
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
@@ -187,6 +202,50 @@ export async function startServer() {
             return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
         }
         return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no disparo via API' });
+    });
+
+    // --- Rotas de Persistência do Kanban e Zonas ---
+
+    app.get('/api/pedidos', async (req, reply) => {
+        const pedidos = await getPedidos();
+        return reply.send(pedidos.map((p: any) => JSON.parse(p.dados_json)));
+    });
+    app.post('/api/pedidos', async (req: any, reply) => {
+        await clearPedidos();
+        for (const pedido of req.body) await savePedido(pedido);
+        return reply.send({ ok: true });
+    });
+    app.delete('/api/pedidos/:id', async (req: any, reply) => {
+        await deletePedido(req.params.id);
+        return reply.send({ ok: true });
+    });
+
+    app.get('/api/pacotes', async (req, reply) => {
+        const pacotes = await getPacotes();
+        return reply.send(pacotes.map((p: any) => JSON.parse(p.dados_json)));
+    });
+    app.post('/api/pacotes', async (req: any, reply) => {
+        await clearPacotes();
+        for (const pacote of req.body) await savePacote(pacote);
+        return reply.send({ ok: true });
+    });
+    app.delete('/api/pacotes/:id', async (req: any, reply) => {
+        await deletePacote(req.params.id);
+        return reply.send({ ok: true });
+    });
+
+    app.get('/api/zonas', async (req, reply) => {
+        const zonas = await getZonas();
+        return reply.send(zonas.map((z: any) => JSON.parse(z.dados_json)));
+    });
+    app.post('/api/zonas', async (req: any, reply) => {
+        await clearZonas();
+        for (const zona of req.body) await saveZona(zona);
+        return reply.send({ ok: true });
+    });
+    app.delete('/api/zonas/:id', async (req: any, reply) => {
+        await deleteZona(req.params.id);
+        return reply.send({ ok: true });
     });
 
     app.register(async (instance) => {
