@@ -70,6 +70,10 @@ export async function initDatabase(): Promise<Database> {
             );
         `);
 
+        await database.exec(`CREATE TABLE IF NOT EXISTS pedidos (id TEXT PRIMARY KEY, dados_json TEXT)`);
+        await database.exec(`CREATE TABLE IF NOT EXISTS pacotes (id TEXT PRIMARY KEY, dados_json TEXT)`);
+        await database.exec(`CREATE TABLE IF NOT EXISTS zonas (id TEXT PRIMARY KEY, dados_json TEXT)`);
+
         db = database;
         return database;
     });
@@ -246,4 +250,55 @@ export async function getExtratoFinanceiro(telegram_id: string) {
 export async function zerarAcertoFinanceiro(telegram_id: string) {
     const database = await initDatabase();
     await database.run('UPDATE entregas SET status = "PAGO" WHERE telegram_id = ? AND status = "PENDENTE"', [telegram_id]);
+}
+
+export async function getPedidos() {
+    const database = await initDatabase();
+    return await database.all('SELECT dados_json FROM pedidos');
+}
+export async function savePedido(pedido: any) {
+    const database = await initDatabase();
+    await database.run('INSERT OR REPLACE INTO pedidos (id, dados_json) VALUES (?, ?)', [pedido.id, JSON.stringify(pedido)]);
+}
+export async function deletePedido(id: string) {
+    const database = await initDatabase();
+    await database.run('DELETE FROM pedidos WHERE id = ?', [id]);
+}
+export async function clearPedidos() {
+    const database = await initDatabase();
+    await database.run('DELETE FROM pedidos');
+}
+
+export async function getPacotes() {
+    const database = await initDatabase();
+    return await database.all('SELECT dados_json FROM pacotes');
+}
+export async function savePacote(pacote: any) {
+    const database = await initDatabase();
+    await database.run('INSERT OR REPLACE INTO pacotes (id, dados_json) VALUES (?, ?)', [pacote.id, JSON.stringify(pacote)]);
+}
+export async function deletePacote(id: string) {
+    const database = await initDatabase();
+    await database.run('DELETE FROM pacotes WHERE id = ?', [id]);
+}
+export async function clearPacotes() {
+    const database = await initDatabase();
+    await database.run('DELETE FROM pacotes');
+}
+
+export async function getZonas() {
+    const database = await initDatabase();
+    return await database.all('SELECT dados_json FROM zonas');
+}
+export async function saveZona(zona: any) {
+    const database = await initDatabase();
+    await database.run('INSERT OR REPLACE INTO zonas (id, dados_json) VALUES (?, ?)', [zona.id, JSON.stringify(zona)]);
+}
+export async function deleteZona(id: string) {
+    const database = await initDatabase();
+    await database.run('DELETE FROM zonas WHERE id = ?', [id]);
+}
+export async function clearZonas() {
+    const database = await initDatabase();
+    await database.run('DELETE FROM zonas');
 }

@@ -420,18 +420,29 @@
         let latLngPedidoAtual = null;
         let zonaDetectadaAtual = null;
 
-        function salvarKanbanStorage() {
-            localStorage.setItem('ceia_kanban', JSON.stringify({ pedidos, pacotes }));
+        async function salvarKanbanStorage() {
+            try {
+                await Promise.all([
+                    fetch('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pedidos) }),
+                    fetch('/api/pacotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pacotes) })
+                ]);
+            } catch (e) {
+                console.error("Falha ao salvar kanban:", e);
+                showToast('Erro de sincronização com o servidor.', 'error');
+            }
         }
 
-        function carregarKanbanStorage() {
-            const data = localStorage.getItem('ceia_kanban');
-            if (data) {
-                try {
-                    const parsed = JSON.parse(data);
-                    pedidos = parsed.pedidos || [];
-                    pacotes = parsed.pacotes || [];
-                } catch(e) {}
+        async function carregarKanbanStorage() {
+            try {
+                const [pedidosRes, pacotesRes] = await Promise.all([
+                    fetch('/api/pedidos'),
+                    fetch('/api/pacotes')
+                ]);
+                pedidos = await pedidosRes.json();
+                pacotes = await pacotesRes.json();
+            } catch (e) {
+                console.error("Falha ao carregar kanban:", e);
+                showToast('Erro ao carregar dados do servidor.', 'error');
             }
             renderizarKanban();
         }
@@ -488,7 +499,7 @@
             carregarZonasStorage();
         }
 
-        function salvarZonasStorage() {
+        async function salvarZonasStorage() {
             const data = zonas.map(z => {
                 let tipo = z.overlay instanceof google.maps.Polygon ? 'polygon' : 'circle';
                 let coords = tipo === 'polygon' ? z.overlay.getPath().getArray().map(p => ({lat: p.lat(), lng: p.lng()})) : null;
@@ -496,22 +507,32 @@
                 let radius = tipo === 'circle' ? z.overlay.getRadius() : null;
                 return { id: z.id, nome: z.nome, taxa: z.taxa, cor: z.cor, tipo, coords, center, radius };
             });
-            localStorage.setItem('ceia_zonas', JSON.stringify(data));
+            try {
+                await fetch('/api/zonas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            } catch (e) {
+                console.error("Falha ao salvar zonas:", e);
+                showToast('Erro ao salvar mapa de taxas.', 'error');
+            }
         }
 
-        function carregarZonasStorage() {
-            const saved = localStorage.getItem('ceia_zonas');
-            if(!saved) return;
-            const data = JSON.parse(saved);
-            data.forEach(z => {
-                let overlay;
-                if(z.tipo === 'polygon') overlay = new google.maps.Polygon({ paths: z.coords, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
-                else overlay = new google.maps.Circle({ center: z.center, radius: z.radius, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
+        async function carregarZonasStorage() {
+            try {
+                const res = await fetch('/api/zonas');
+                if (!res.ok) return;
+                const data = await res.json();
+                data.forEach(z => {
+                    let overlay;
+                    if(z.tipo === 'polygon') overlay = new google.maps.Polygon({ paths: z.coords, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
+                    else overlay = new google.maps.Circle({ center: z.center, radius: z.radius, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
 
-                overlay.setMap(map);
-                zonas.push({ id: z.id, nome: z.nome, taxa: z.taxa, cor: z.cor, overlay: overlay });
-            });
-            atualizarListaZonas();
+                    overlay.setMap(map);
+                    zonas.push({ id: z.id, nome: z.nome, taxa: z.taxa, cor: z.cor, overlay: overlay });
+                });
+                atualizarListaZonas();
+            } catch (e) {
+                console.error("Falha ao carregar zonas:", e);
+                showToast('Erro ao carregar mapa de taxas.', 'error');
+            }
         }
 
         function initAutocomplete() {
