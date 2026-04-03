@@ -1,4 +1,3 @@
-import os from 'os';
 import OpenAI, { toFile } from 'openai';
 import { getConfiguracoes, getMotoboysOnline } from './database'; 
 import { getRotaPeloCliente } from './operacao';
@@ -11,21 +10,18 @@ import { broadcastLog } from './logger';
 export let qrCodeBase64: string | null = null;
 export let sessionStatus: string = 'DISCONNECTED';
 
-// Configurações exatas do seu Docker v1.8.2
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://127.0.0.1:8081'; 
 const INSTANCE_NAME = 'CeiaBot';
 const GLOBAL_API_KEY = 'CEIA_CHAVE_MESTRA_2026'; 
 
-function getMachineIP() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name] || []) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
+function getPublicAppUrl(): string | null {
+    const publicAppUrl = process.env.PUBLIC_APP_URL?.trim();
+
+    if (!publicAppUrl) {
+        return null;
     }
-    return '127.0.0.1';
+
+    return publicAppUrl.replace(/\/+$/, '');
 }
 
 /**
@@ -37,7 +33,6 @@ export async function conectarEvolutionAPI() {
         sessionStatus = 'CONNECTING';
         broadcastLog('WHATSAPP', 'Verificando instância na Evolution API...');
 
-        // 1. Tenta criar a instância (sem quebrar se ela já existir)
         const createRes = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
@@ -51,38 +46,42 @@ export async function conectarEvolutionAPI() {
         let createData: any = {};
         try { createData = JSON.parse(createText); } catch (e) {}
         
-        // Se a API mandou o QR Code na criação, morre aqui
         if (createData && createData.qrcode && createData.qrcode.base64) {
             qrCodeBase64 = createData.qrcode.base64;
             broadcastLog('WHATSAPP', 'QR Code gerado com sucesso. Aguardando leitura...');
+        } else {
+            broadcastLog('WHATSAPP', 'Solicitando pareamento e gerando QR Code...');
+            const connectRes = await fetch(`${EVOLUTION_API_URL}/instance/connect/${INSTANCE_NAME}`, {
+                method: 'GET',
+                headers: { 'apikey': GLOBAL_API_KEY }
+            });
+
+            const connectText = await connectRes.text();
+            let connectData: any = {};
+            try { connectData = JSON.parse(connectText); } catch (e) {}
+            
+            if (connectData.base64) {
+                qrCodeBase64 = connectData.base64;
+                broadcastLog('WHATSAPP', 'QR Code puxado com sucesso. Aguardando leitura...');
+            } else if (connectData.instance && connectData.instance.state === 'open') {
+                sessionStatus = 'CONNECTED';
+                broadcastLog('WHATSAPP', 'O WhatsApp já está conectado!');
+            } else {
+                broadcastLog('ERROR', 'A API respondeu, mas não enviou o QR Code.');
+            }
+        }
+
+        const publicAppUrl = getPublicAppUrl();
+
+        if (!publicAppUrl) {
+            broadcastLog('ERROR', 'PUBLIC_APP_URL não configurada. O webhook do WhatsApp não pode ser registrado sem uma URL pública acessível.');
             return;
         }
 
-        // 2. Se a instância já existia, puxamos na força via GET
-        broadcastLog('WHATSAPP', 'Solicitando pareamento e gerando QR Code...');
-        const connectRes = await fetch(`${EVOLUTION_API_URL}/instance/connect/${INSTANCE_NAME}`, {
-            method: 'GET',
-            headers: { 'apikey': GLOBAL_API_KEY }
-        });
-
-        const connectText = await connectRes.text();
-        let connectData: any = {};
-        try { connectData = JSON.parse(connectText); } catch (e) {}
-        
-        if (connectData.base64) {
-            qrCodeBase64 = connectData.base64;
-            broadcastLog('WHATSAPP', 'QR Code puxado com sucesso. Aguardando leitura...');
-        } else if (connectData.instance && connectData.instance.state === 'open') {
-            sessionStatus = 'CONNECTED';
-            broadcastLog('WHATSAPP', 'O WhatsApp já está conectado!');
-        } else {
-            broadcastLog('ERROR', 'A API respondeu, mas não enviou o QR Code.');
-        }
-
-        const appUrl = `http://${getMachineIP()}:3000`;
+        const webhookUrl = `${publicAppUrl}/api/whatsapp/webhook`;
         const webhookConfig = {
             webhook: {
-                url: `${appUrl}/api/whatsapp/webhook`,
+                url: webhookUrl,
                 byEvents: false,
                 base64: true, 
                 readMessage: true, 
@@ -90,12 +89,25 @@ export async function conectarEvolutionAPI() {
             }
         };
 
-        await fetch(`${EVOLUTION_API_URL}/webhook/set/${INSTANCE_NAME}`, {
+        broadcastLog('WHATSAPP', `Configurando webhook na Evolution API: ${webhookUrl}`);
+
+        const webhookRes = await fetch(`${EVOLUTION_API_URL}/webhook/set/${INSTANCE_NAME}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
             body: JSON.stringify(webhookConfig)
         });
-        broadcastLog('WHATSAPP', 'Webhook de recepção configurado na Evolution API.');
+
+        const webhookText = await webhookRes.text();
+
+        if (!webhookRes.ok) {
+            broadcastLog('ERROR', `Falha ao configurar webhook na Evolution API. Status: ${webhookRes.status}. Resposta: ${webhookText}`);
+            return;
+        }
+
+        broadcastLog('WHATSAPP', `Webhook de recepção configurado com sucesso: ${webhookUrl}`);
+        if (webhookText) {
+            broadcastLog('WHATSAPP', `Resposta da Evolution API ao configurar webhook: ${webhookText}`);
+        }
 
     } catch (error) {
         broadcastLog('ERROR', 'Falha fatal ao comunicar com a Evolution API.');
@@ -248,7 +260,7 @@ async function transcreverAudioWhatsApp(messageData: any): Promise<string> {
     } catch (error) {
         console.error("Erro ao transcrever áudio:", error);
         broadcastLog('ERROR', 'Falha no processo de transcrição de áudio.');
-        return ""; // Retorna string vazia em caso de falha para não quebrar o fluxo
+        return "";
     }
 }
 
@@ -258,7 +270,6 @@ async function transcreverAudioWhatsApp(messageData: any): Promise<string> {
 async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
     try {
         const config = await getConfiguracoes();
-        // Assumindo que a chave do token está em 'telegram_token' ou 'telegram_bot_token'
         const token = config.telegram_token || config.telegram_bot_token;
         
         if (!token) {
@@ -293,7 +304,6 @@ export async function handleWhatsAppWebhook(payload: any) {
         const numeroCliente = payload.data?.key?.remoteJid || payload.data?.message?.key?.remoteJid;
         if (!numeroCliente) return;
 
-        // Marca a mensagem como lida na Evolution API para não ficar pendente
         if (payload.data?.key?.id && !payload.data?.key?.fromMe) {
             await fetch(`${EVOLUTION_API_URL}/chat/read/${INSTANCE_NAME}`, {
                 method: 'POST',
@@ -302,7 +312,6 @@ export async function handleWhatsAppWebhook(payload: any) {
             });
         }
 
-        // Se o cliente enviar uma localização, repassa o link do Maps direto para o motoboy
         const location = payload.data?.message?.locationMessage;
         if (location) {
             const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
@@ -316,18 +325,15 @@ export async function handleWhatsAppWebhook(payload: any) {
         let mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;
         const isAudio = !!payload.data?.message?.audioMessage || !!payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
         
-        // Se for áudio, transcreve e o resultado se torna a mensagem principal a ser processada
         if (isAudio) {
             broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
             mensagemTexto = await transcreverAudioWhatsApp(payload.data);
         }
 
-        // Se após tudo não houver texto (nem original, nem transcrito) ou a msg for nossa, encerra.
         if (!mensagemTexto || payload.data?.key?.fromMe) return;
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroCliente.split('@')[0]}]: ${mensagemTexto}`);
 
-        // Tenta encontrar uma rota ativa. Se encontrar, resume a mensagem para o motoboy.
         const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
         if (rota && rota.telegram_id) {
             const resumo = await resumirClienteParaMotoboy(mensagemTexto);
@@ -340,19 +346,16 @@ export async function handleWhatsAppWebhook(payload: any) {
             return;
         }
 
-        // Se não houver rota, entra no fluxo de atendimento padrão
         const config = await getConfiguracoes();
 
-        // Gatilho do Cardápio: Sempre ativo
         if (mensagemTexto.toLowerCase().includes('cardapio') || mensagemTexto.toLowerCase().includes('menu')) {
             if (config.link_cardapio) {
                 await enviarMensagemWhatsApp(numeroCliente, config.link_cardapio);
                 broadcastLog('WHATSAPP', `Link do cardápio enviado para ${numeroCliente.split('@')[0]}.`);
             }
-            return; // Encerra aqui após enviar o cardápio
+            return;
         }
 
-        // IA Institucional: Apenas se o auto-responder estiver ligado
         if (config.auto_responder) {
             const respostaIA = await processarMensagemIA(mensagemTexto);
             broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroCliente.split('@')[0]}...`);
@@ -372,7 +375,8 @@ export async function handleWhatsAppWebhook(payload: any) {
 
 export async function enviarMensagemWhatsApp(numero: string, texto: string): Promise<boolean> {
     try {
-        // CORREÇÃO: Payload atualizado para o formato Evolution 1.8.2
+        const numeroNormalizado = numero.includes('@') ? numero.split('@')[0] : numero.replace(/\D/g, '');
+
         const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`, {
             method: 'POST',
             headers: {
@@ -380,7 +384,7 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string): Pro
                 'apikey': GLOBAL_API_KEY
             },
             body: JSON.stringify({
-                number: numero, 
+                number: numeroNormalizado, 
                 options: { delay: 1200, presence: "composing" }, 
                 textMessage: { text: texto } 
             })
