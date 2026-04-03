@@ -90,11 +90,11 @@ function getMessageText(message: any, data?: any): string {
         message?.videoMessage?.caption ||
         message?.documentMessage?.caption ||
         message?.buttonsResponseMessage?.selectedButtonId ||
+        message?.buttonsResponseMessage?.selectedDisplayText ||
         message?.listResponseMessage?.title ||
         message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
         message?.templateButtonReplyMessage?.selectedId ||
         message?.templateButtonReplyMessage?.selectedDisplayText ||
-        message?.buttonsResponseMessage?.selectedDisplayText ||
         data?.text ||
         data?.body ||
         ''
@@ -413,11 +413,6 @@ export async function handleWhatsAppWebhook(payload: any) {
             return;
         }
 
-        if (!message) {
-            broadcastLog('WHATSAPP', `Webhook de ${normalizePhone(numeroCliente)} sem conteúdo de mensagem. Evento ignorado.`);
-            return;
-        }
-
         if (key?.id && !key?.fromMe) {
             await fetch(`${EVOLUTION_API_URL}/chat/read/${INSTANCE_NAME}`, {
                 method: 'POST',
@@ -426,7 +421,7 @@ export async function handleWhatsAppWebhook(payload: any) {
             });
         }
 
-        const location = getLocationMessage(message);
+        const location = getLocationMessage(message, data);
         if (location) {
             const rota = await getRotaPeloCliente(normalizePhone(numeroCliente));
             if (rota && rota.telegram_id) {
@@ -436,15 +431,20 @@ export async function handleWhatsAppWebhook(payload: any) {
             }
         }
 
-        let mensagemTexto = getMessageText(message);
-        const isAudio = isAudioMessage(message);
+        let mensagemTexto = getMessageText(message, data);
+        const isAudio = isAudioMessage(message, data);
 
         if (isAudio) {
             broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
             mensagemTexto = await transcreverAudioWhatsApp(data);
         }
 
-        if (!mensagemTexto || key?.fromMe) return;
+        if (!mensagemTexto || key?.fromMe) {
+            if (!mensagemTexto) {
+                broadcastLog('WHATSAPP', `Webhook de ${normalizePhone(numeroCliente)} sem texto aproveitável. Evento ignorado.`);
+            }
+            return;
+        }
 
         const numeroNormalizado = normalizePhone(numeroCliente);
 
