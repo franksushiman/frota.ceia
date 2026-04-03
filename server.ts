@@ -15,6 +15,16 @@ const __dirname = path.dirname(__filename);
 
 export const app: FastifyInstance = Fastify({ logger: false });
 
+function parseWebhookBody(body: any): any {
+    if (typeof body !== 'string') return body;
+
+    try {
+        return JSON.parse(body);
+    } catch {
+        return body;
+    }
+}
+
 export async function startServer() {
     await initDatabase();
 
@@ -191,7 +201,8 @@ export async function startServer() {
 
     app.post('/api/whatsapp/webhook', async (request: any, reply) => {
         console.log('📥 [EVOLUTION] Webhook recebido em /api/whatsapp/webhook');
-        await handleWhatsAppWebhook(request.body);
+        const parsedBody = parseWebhookBody(request.body);
+        await handleWhatsAppWebhook(parsedBody);
         return reply.code(200).type('application/json; charset=utf-8').send({ recebido: true });
     });
 

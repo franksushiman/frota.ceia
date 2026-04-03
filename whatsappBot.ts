@@ -45,9 +45,27 @@ function extractPublicUrlFromEvolutionResponse(data: any): string | null {
     return null;
 }
 
+function tryParseJson(value: any): any {
+    if (typeof value !== 'string') return value;
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+}
+
 function getWebhookData(payload: any): any {
-    if (!payload) return null;
-    return payload.data || payload;
+    const parsedPayload = tryParseJson(payload);
+
+    if (!parsedPayload) return null;
+
+    return (
+        parsedPayload?.data?.data ||
+        parsedPayload?.data ||
+        parsedPayload?.payload ||
+        parsedPayload
+    );
 }
 
 function getWebhookKey(data: any): any {
@@ -56,6 +74,7 @@ function getWebhookKey(data: any): any {
         data?.message?.key ||
         data?.messages?.[0]?.key ||
         data?.data?.key ||
+        data?.messages?.[0]?.message?.key ||
         null
     );
 }
@@ -66,8 +85,10 @@ function getRemoteJid(data: any, key: any): string | null {
         data?.remoteJid ||
         data?.message?.key?.remoteJid ||
         data?.messages?.[0]?.key?.remoteJid ||
+        data?.messages?.[0]?.message?.key?.remoteJid ||
         data?.sender ||
         data?.jid ||
+        data?.participant ||
         null
     );
 }
@@ -78,6 +99,7 @@ function getMessageContent(data: any): any {
         data?.messages?.[0]?.message ||
         data?.data?.message ||
         data?.msg ||
+        data?.text?.message ||
         null
     );
 }
@@ -95,9 +117,11 @@ function getMessageText(message: any, data?: any): string {
         message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
         message?.templateButtonReplyMessage?.selectedId ||
         message?.templateButtonReplyMessage?.selectedDisplayText ||
+        message?.text ||
+        data?.text?.message ||
         data?.text ||
         data?.body ||
-        ''
+        data?.messageType === 'conversation' ? data?.message?.conversation || '' : ''
     );
 }
 
