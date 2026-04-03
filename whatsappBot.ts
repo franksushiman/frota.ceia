@@ -24,6 +24,27 @@ function getPublicAppUrl(): string | null {
     return publicAppUrl.replace(/\/+$/, '');
 }
 
+function extractPublicUrlFromEvolutionResponse(data: any): string | null {
+    const possibleValues = [
+        data?.serverUrl,
+        data?.url,
+        data?.webhook,
+        data?.webhookUrl,
+        data?.instance?.serverUrl,
+        data?.instance?.url,
+        data?.instance?.webhook,
+        data?.instance?.webhookUrl
+    ];
+
+    for (const value of possibleValues) {
+        if (typeof value === 'string' && /^https?:\/\//i.test(value.trim())) {
+            return value.trim().replace(/\/+$/, '');
+        }
+    }
+
+    return null;
+}
+
 /**
  * Cria a instância na Evolution API e solicita o QR Code com tratamento de erros
  */
@@ -32,6 +53,8 @@ export async function conectarEvolutionAPI() {
         qrCodeBase64 = null;
         sessionStatus = 'CONNECTING';
         broadcastLog('WHATSAPP', 'Verificando instância na Evolution API...');
+
+        let evolutionPublicUrl: string | null = null;
 
         const createRes = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
             method: 'POST',
@@ -45,6 +68,8 @@ export async function conectarEvolutionAPI() {
         const createText = await createRes.text();
         let createData: any = {};
         try { createData = JSON.parse(createText); } catch (e) {}
+
+        evolutionPublicUrl = extractPublicUrlFromEvolutionResponse(createData);
         
         if (createData && createData.qrcode && createData.qrcode.base64) {
             qrCodeBase64 = createData.qrcode.base64;
@@ -59,6 +84,8 @@ export async function conectarEvolutionAPI() {
             const connectText = await connectRes.text();
             let connectData: any = {};
             try { connectData = JSON.parse(connectText); } catch (e) {}
+
+            evolutionPublicUrl = evolutionPublicUrl || extractPublicUrlFromEvolutionResponse(connectData);
             
             if (connectData.base64) {
                 qrCodeBase64 = connectData.base64;
@@ -71,10 +98,10 @@ export async function conectarEvolutionAPI() {
             }
         }
 
-        const publicAppUrl = getPublicAppUrl();
+        const publicAppUrl = getPublicAppUrl() || evolutionPublicUrl;
 
         if (!publicAppUrl) {
-            broadcastLog('ERROR', 'PUBLIC_APP_URL não configurada. O webhook do WhatsApp não pode ser registrado sem uma URL pública acessível.');
+            broadcastLog('ERROR', 'PUBLIC_APP_URL não configurada e nenhuma URL pública foi identificada automaticamente. O webhook do WhatsApp não pode ser registrado sem uma URL pública acessível.');
             return;
         }
 
@@ -301,10 +328,12 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
 export async function handleWhatsAppWebhook(payload: any) {
     try {
         console.log("🔔 [WEBHOOK] Bateu no webhook! Recebendo dados...");
-        const numeroCliente = payload.data?.key?.remoteJid || payload.data?.message?.key?.remoteJid;
+        const data = payload?.data || payload;
+        const key = data?.key || data?.message?.key;
+        const numeroCliente = key?.remoteJid;
         if (!numeroCliente) return;
 
-        if (payload.data?.key?.id && !payload.data?.key?.fromMe) {
+        if (key?.id && !key?.fromMe) {
             await fetch(`${EVOLUTION_API_URL}/chat/read/${INSTANCE_NAME}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
@@ -312,7 +341,7 @@ export async function handleWhatsAppWebhook(payload: any) {
             });
         }
 
-        const location = payload.data?.message?.locationMessage;
+        const location = data?.message?.locationMessage;
         if (location) {
             const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
             if (rota && rota.telegram_id) {
@@ -322,15 +351,15 @@ export async function handleWhatsAppWebhook(payload: any) {
             }
         }
 
-        let mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;
-        const isAudio = !!payload.data?.message?.audioMessage || !!payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+        let mensagemTexto = data?.message?.conversation || data?.message?.extendedTextMessage?.text;
+        const isAudio = !!data?.message?.audioMessage || !!data?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
         
         if (isAudio) {
             broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
-            mensagemTexto = await transcreverAudioWhatsApp(payload.data);
+            mensagemTexto = await transcreverAudioWhatsApp(data);
         }
 
-        if (!mensagemTexto || payload.data?.key?.fromMe) return;
+        if (!mensagemTexto || key?.fromMe) return;
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroCliente.split('@')[0]}]: ${mensagemTexto}`);
 
