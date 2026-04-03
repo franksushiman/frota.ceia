@@ -125,7 +125,7 @@ async function processarMensagemIA(mensagemCliente: string): Promise<string> {
             messages: [
                 { 
                     role: "system", 
-                    content: `Você é a IA de logística CEIA. Seja prestativo, rápido e use este dado real do radar para informar o cliente: [${radarStatus}]. Se o cliente perguntar sobre o pedido, use a informação do radar de forma natural.`
+                    content: `Você é a interface automática da CEIA. Seja prestativo, rápido e use os dados do radar: [${radarStatus}]. NUNCA use saudações formais, não assine a mensagem e não peça para o cliente entrar em contato com o restaurante.`
                 },
                 { role: "user", content: mensagemCliente }
             ],
@@ -149,7 +149,7 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
             messages: [
                 { 
                     role: "system", 
-                    content: "Você é a interface de notificações inteligentes da CEIA. Sua função é transformar mensagens brutas de entregadores em avisos diretos, profissionais e curtos para o cliente. REGRAS CRÍTICAS: 1. NUNCA use saudações formais como 'Atenciosamente', 'Cordialmente' ou assinaturas. 2. NUNCA sugira que o cliente ligue ou entre em contato com o restaurante; VOCÊ é o canal de resolução. 3. Use um tom de notificação de app (ex: 'O sistema identificou...'). 4. Seja extremamente breve."
+                    content: "Você é a interface de notificações inteligentes da CEIA. Sua função é transformar mensagens brutas de entregadores em avisos diretos, profissionais e curtos para o cliente. REGRAS CRÍTICAS: 1. NUNCA use saudações formais como 'Atenciosamente', 'Cordialmente' ou assinaturas. 2. NUNCA sugira que o cliente ligue ou entre em contato com o restaurante; VOCÊ é o canal de resolução. 3. Use um tom de notificação de app (ex: 'O sistema identificou...'). 4. Seja extremamente breve. REGRA DE SAUDAÇÃO: Se o entregador mandar apenas 'oi', 'cheguei', 'tô aqui' ou 'boa noite', NUNCA faça perguntas ou ofereça ajuda. Apenas traduza para: 'O parceiro entregador informa que já se encontra no local.' Fim."
                 },
                 { role: "user", content: mensagemMotoboy }
             ],
@@ -324,15 +324,7 @@ export async function handleWhatsAppWebhook(payload: any) {
         if (config.auto_responder) {
             const respostaIA = await processarMensagemIA(mensagemTexto);
             broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroCliente.split('@')[0]}...`);
-            await fetch(`${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
-                body: JSON.stringify({
-                    number: numeroCliente,
-                    options: { delay: 1200, presence: "composing" },
-                    textMessage: { text: respostaIA }
-                })
-            });
+            await enviarMensagemWhatsApp(numeroCliente, respostaIA);
             broadcastLog('SUCCESS', `Mensagem enviada com sucesso para ${numeroCliente.split('@')[0]}`);
         }
 
@@ -356,15 +348,15 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string): Pro
                 'apikey': GLOBAL_API_KEY
             },
             body: JSON.stringify({
-                number: numero, 
-                options: { delay: 1200, presence: "composing" }, // Fica "digitando..." por 1 segundinho pra ficar natural
-                textMessage: { text: texto }
+                number: numero,
+                options: { delay: 1200, presence: "composing" },
+                text: texto
             })
         });
 
         if (!res.ok) {
             const erroDetalhado = await res.text();
-            console.error("A API da Evolution recusou o envio:", erroDetalhado);
+            console.error("Erro Evolution:", erroDetalhado);
             throw new Error('Falha na resposta da API Evolution');
         }
         
