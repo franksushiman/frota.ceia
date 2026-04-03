@@ -121,10 +121,9 @@ export async function startServer() {
             const data = await resOpenAI.json();
             resumoBairros = data.choices[0].message.content.trim();
         } catch (e) {
-            console.error("FALHA NA OPENAI:", e);
+            console.error('FALHA NA OPENAI:', e);
             return reply.code(500).type('application/json; charset=utf-8').send({ error: 'A IA não conseguiu analisar os endereços desta rota.' });
         }
-
 
         const totalTaxa = pedidos.reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
         const msgMotoboy = `🚀 *NOVA ROTA DE ENTREGA!*\n\n*Setor:* ${resumoBairros}\n*Qtd:* ${pedidos.length} entregas\n*Total a Faturar:* R$ ${totalTaxa.toFixed(2)}`;
@@ -145,14 +144,14 @@ export async function startServer() {
 
     app.post('/api/operacao/sos/reply', async (request: any, reply) => {
         const { telegram_id, texto } = request.body;
-        console.log("[DEBUG SOS] O Painel tentou enviar mensagem para o ID:", request.body.telegram_id, "| Texto:", request.body.texto);
+        console.log('[DEBUG SOS] O Painel tentou enviar mensagem para o ID:', request.body.telegram_id, '| Texto:', request.body.texto);
         await enviarMensagemTelegram(telegram_id, texto);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.post('/api/operacao/baixa', async (request: any, reply) => {
         const { pedidoId } = request.body;
-        
+
         const pacotesRaw = await getPacotes();
         const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
         const pedidosRaw = await getPedidos();
@@ -191,6 +190,7 @@ export async function startServer() {
     });
 
     app.post('/api/whatsapp/webhook', async (request: any, reply) => {
+        console.log('📥 [EVOLUTION] Webhook recebido em /api/whatsapp/webhook');
         await handleWhatsAppWebhook(request.body);
         return reply.code(200).type('application/json; charset=utf-8').send({ recebido: true });
     });
@@ -204,17 +204,17 @@ export async function startServer() {
         return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no disparo via API' });
     });
 
-    // --- Rotas de Persistência do Kanban e Zonas ---
-
     app.get('/api/pedidos', async (req, reply) => {
         const pedidos = await getPedidos();
         return reply.send(pedidos.map((p: any) => JSON.parse(p.dados_json)));
     });
+
     app.post('/api/pedidos', async (req: any, reply) => {
         await clearPedidos();
         for (const pedido of req.body) await savePedido(pedido);
         return reply.send({ ok: true });
     });
+
     app.delete('/api/pedidos/:id', async (req: any, reply) => {
         await deletePedido(req.params.id);
         return reply.send({ ok: true });
@@ -224,11 +224,13 @@ export async function startServer() {
         const pacotes = await getPacotes();
         return reply.send(pacotes.map((p: any) => JSON.parse(p.dados_json)));
     });
+
     app.post('/api/pacotes', async (req: any, reply) => {
         await clearPacotes();
         for (const pacote of req.body) await savePacote(pacote);
         return reply.send({ ok: true });
     });
+
     app.delete('/api/pacotes/:id', async (req: any, reply) => {
         await deletePacote(req.params.id);
         return reply.send({ ok: true });
@@ -238,11 +240,13 @@ export async function startServer() {
         const zonas = await getZonas();
         return reply.send(zonas.map((z: any) => JSON.parse(z.dados_json)));
     });
+
     app.post('/api/zonas', async (req: any, reply) => {
         await clearZonas();
         for (const zona of req.body) await saveZona(zona);
         return reply.send({ ok: true });
     });
+
     app.delete('/api/zonas/:id', async (req: any, reply) => {
         await deleteZona(req.params.id);
         return reply.send({ ok: true });
@@ -261,14 +265,12 @@ export async function startServer() {
                 await broadcastLog('FROTA', `Radar: ${derrubados} motoboy(s) ficaram OFFLINE por perda de sinal GPS.`);
             }
         } catch (e) {
-            console.error("Erro ao verificar motoboys inativos:", e);
+            console.error('Erro ao verificar motoboys inativos:', e);
         } finally {
-            // Re-agenda a próxima verificação
             setTimeout(checkInactiveDrivers, 60000);
         }
     };
 
-    // Inicia a primeira verificação após 1 minuto
     setTimeout(checkInactiveDrivers, 60000);
 
     await app.listen({ port: 3000, host: '0.0.0.0' });
