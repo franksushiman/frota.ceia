@@ -45,6 +45,47 @@ function extractPublicUrlFromEvolutionResponse(data: any): string | null {
     return null;
 }
 
+function getWebhookData(payload: any): any {
+    return payload?.data || payload;
+}
+
+function getWebhookKey(data: any): any {
+    return data?.key || data?.message?.key || data?.messages?.[0]?.key || null;
+}
+
+function getRemoteJid(data: any, key: any): string | null {
+    return (
+        key?.remoteJid ||
+        data?.remoteJid ||
+        data?.message?.key?.remoteJid ||
+        data?.messages?.[0]?.key?.remoteJid ||
+        null
+    );
+}
+
+function getMessageContent(data: any): any {
+    return data?.message || data?.messages?.[0]?.message || null;
+}
+
+function getMessageText(message: any): string {
+    return (
+        message?.conversation ||
+        message?.extendedTextMessage?.text ||
+        message?.imageMessage?.caption ||
+        message?.videoMessage?.caption ||
+        message?.documentMessage?.caption ||
+        ''
+    );
+}
+
+function isAudioMessage(message: any): boolean {
+    return !!message?.audioMessage || !!message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+}
+
+function getLocationMessage(message: any): any {
+    return message?.locationMessage || null;
+}
+
 /**
  * Cria a instância na Evolution API e solicita o QR Code com tratamento de erros
  */
@@ -328,10 +369,12 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
 export async function handleWhatsAppWebhook(payload: any) {
     try {
         console.log("🔔 [WEBHOOK] Bateu no webhook! Recebendo dados...");
-        const data = payload?.data || payload;
-        const key = data?.key || data?.message?.key;
-        const numeroCliente = key?.remoteJid;
-        if (!numeroCliente) return;
+        const data = getWebhookData(payload);
+        const key = getWebhookKey(data);
+        const numeroCliente = getRemoteJid(data, key);
+        const message = getMessageContent(data);
+
+        if (!numeroCliente || !message) return;
 
         if (key?.id && !key?.fromMe) {
             await fetch(`${EVOLUTION_API_URL}/chat/read/${INSTANCE_NAME}`, {
@@ -341,7 +384,7 @@ export async function handleWhatsAppWebhook(payload: any) {
             });
         }
 
-        const location = data?.message?.locationMessage;
+        const location = getLocationMessage(message);
         if (location) {
             const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
             if (rota && rota.telegram_id) {
@@ -351,8 +394,8 @@ export async function handleWhatsAppWebhook(payload: any) {
             }
         }
 
-        let mensagemTexto = data?.message?.conversation || data?.message?.extendedTextMessage?.text;
-        const isAudio = !!data?.message?.audioMessage || !!data?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+        let mensagemTexto = getMessageText(message);
+        const isAudio = isAudioMessage(message);
         
         if (isAudio) {
             broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
