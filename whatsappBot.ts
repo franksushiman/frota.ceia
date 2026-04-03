@@ -175,7 +175,7 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
 
 export async function handleWhatsAppWebhook(payload: any) {
     try {
-        const numeroCliente = payload.data?.key?.remoteJid;
+        const numeroCliente = payload.data?.key?.remoteJid || payload.data?.message?.key?.remoteJid;
         if (!numeroCliente) return;
 
         const mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;

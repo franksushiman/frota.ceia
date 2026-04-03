@@ -33,11 +33,18 @@ export async function getRotasMotoboy(telegram_id: string) {
 }
 
 export async function getRotaPeloCliente(telefoneCliente: string) {
+    // Remove tudo que não for número (ex: recebe 5511999999999)
     const numeroLimpo = telefoneCliente.replace(/\D/g, '');
+    
+    // Pega só os últimos 8 dígitos (o núcleo real da linha do cliente)
+    const nucleo = numeroLimpo.slice(-8);
+
     const rotas = await getRotasAtivas();
     return rotas.find((r: any) => {
         const telBanco = (r.pedido?.telefone || r.pedido?.telefone_cliente || r.pedido?.whatsapp || '').replace(/\D/g, '');
-        return numeroLimpo.endsWith(telBanco) || telBanco.endsWith(numeroLimpo);
+        
+        // Se o telefone do banco tiver pelo menos 8 dígitos e contiver o núcleo, é o mesmo cliente
+        return telBanco.length >= 8 && telBanco.includes(nucleo);
     });
 }
 
