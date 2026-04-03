@@ -153,11 +153,16 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
         }
 
         const url = `https://api.telegram.org/bot${token}/sendMessage`;
-        await fetch(url, {
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, text: text })
         });
+
+        if (!res.ok) {
+            const errorBody = await res.json();
+            broadcastLog('ERROR', `API do Telegram retornou erro ao tentar encaminhar msg: ${JSON.stringify(errorBody)}`);
+        }
 
     } catch (error) {
         broadcastLog('ERROR', `Erro inesperado ao encaminhar mensagem para o Telegram: ${error}`);
