@@ -77,11 +77,12 @@ function getMessageContent(data: any): any {
         data?.message ||
         data?.messages?.[0]?.message ||
         data?.data?.message ||
+        data?.msg ||
         null
     );
 }
 
-function getMessageText(message: any): string {
+function getMessageText(message: any, data?: any): string {
     return (
         message?.conversation ||
         message?.extendedTextMessage?.text ||
@@ -91,16 +92,21 @@ function getMessageText(message: any): string {
         message?.buttonsResponseMessage?.selectedButtonId ||
         message?.listResponseMessage?.title ||
         message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+        message?.templateButtonReplyMessage?.selectedId ||
+        message?.templateButtonReplyMessage?.selectedDisplayText ||
+        message?.buttonsResponseMessage?.selectedDisplayText ||
+        data?.text ||
+        data?.body ||
         ''
     );
 }
 
-function isAudioMessage(message: any): boolean {
-    return !!message?.audioMessage || !!message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+function isAudioMessage(message: any, data?: any): boolean {
+    return !!message?.audioMessage || !!message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage || !!data?.audioMessage;
 }
 
-function getLocationMessage(message: any): any {
-    return message?.locationMessage || null;
+function getLocationMessage(message: any, data?: any): any {
+    return message?.locationMessage || data?.locationMessage || null;
 }
 
 function normalizePhone(input: string): string {
