@@ -11,14 +11,16 @@ async function getRotasAtivas() {
     const pacotesAtivos = pacotes.filter((p: any) => p.status === 'PENDENTE_ACEITE' || p.status === 'EM_ROTA');
     
     for (const pacote of pacotesAtivos) {
-        for (const pedidoId of pacote.pedidosIds) {
-            const pedido = pedidos.find((p: any) => p.id === pedidoId);
-            if (pedido) {
-                ativas.push({
-                    pacoteId: pacote.id,
-                    telegram_id: pacote.motoboy.telegram_id,
-                    pedido: pedido
-                });
+        if (pacote.motoboy) {
+            for (const pedidoId of pacote.pedidosIds) {
+                const pedido = pedidos.find((p: any) => p.id === pedidoId);
+                if (pedido) {
+                    ativas.push({
+                        pacoteId: pacote.id,
+                        telegram_id: pacote.motoboy.telegram_id,
+                        pedido: pedido
+                    });
+                }
             }
         }
     }
