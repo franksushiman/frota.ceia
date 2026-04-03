@@ -2,7 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId, getPacotes, getPedidos, savePacote } from './database';
 import { broadcastLog } from './logger';
 import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
-import { enviarMensagemWhatsApp } from './whatsappBot';
+import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente } from './whatsappBot';
 
 type Step = 'NOME' | 'CPF' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
 
@@ -337,22 +337,20 @@ export async function iniciarTelegram() {
                 // MODO CHAT COM O CLIENTE ATIVO
                 if (session?.step === 'CHAT_CLIENTE') {
                     const num = session.data.telefone_cliente?.replace(/\D/g, '');
-                    console.log("[DEBUG WHATSAPP] Iniciando envio. Numero extraido da sessao:", num);
                     if (num) {
                         try {
-                            const msgCliente = `*[Mensagem do Entregador]*\n${text}\n\n_(Pode responder a esta mensagem)_`;
-                            await enviarMensagemWhatsApp('55' + num, msgCliente);
-                            console.log("[DEBUG WHATSAPP] Sucesso na chamada da API");
-                            await ctx.reply("✅ Mensagem enviada ao cliente!");
+                            const sentMessage = await ctx.reply("Processando e reescrevendo para o cliente...");
+                            const textoProfissional = await traduzirMotoboyParaCliente(text);
+                            await enviarMensagemWhatsApp('55' + num, textoProfissional);
+                            await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
                         } catch (e) {
-                            console.error("[DEBUG WHATSAPP] Erro na API:", e);
-                            await ctx.reply("❌ Falha na integracao com o WhatsApp.");
+                            console.error("[DEBUG WHATSAPP] Erro na API ou IA:", e);
+                            await ctx.reply("❌ Falha ao enviar a mensagem. Verifique a conexão.");
                         }
                     } else {
-                        console.error("[DEBUG WHATSAPP] Erro: Cliente sem numero de telefone na sessao.");
-                        await ctx.reply("❌ Erro: Cliente sem numero de telefone registado.");
+                        await ctx.reply("❌ Erro: Cliente sem número de telefone para esta rota.");
                     }
-                    return; 
+                    return;
                 }
 
                 if (!session) return;

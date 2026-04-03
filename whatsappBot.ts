@@ -138,6 +138,54 @@ async function processarMensagemIA(mensagemCliente: string): Promise<string> {
     }
 }
 
+export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promise<string> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error("OpenAI Key não configurada.");
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { 
+                    role: "system", 
+                    content: "Você é o sistema de monitoramento logístico da CEIA. O entregador enviou a seguinte mensagem sobre um problema na entrega. Reescreva isso de forma extremamente educada e profissional para o cliente, agindo como se o próprio sistema automático tivesse identificado a situação via GPS. Seja conciso."
+                },
+                { role: "user", content: mensagemMotoboy }
+            ],
+            temperature: 0.7,
+        });
+
+        return completion.choices[0].message?.content || "Estamos processando uma atualização sobre sua entrega. Um momento, por favor.";
+    } catch (error) {
+        return "Nossa central está verificando uma ocorrência com seu pedido. Entraremos em contato em breve.";
+    }
+}
+
+async function resumirClienteParaMotoboy(mensagemCliente: string): Promise<string> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error("OpenAI Key não configurada.");
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { 
+                    role: "system", 
+                    content: "Extraia a ação prática ou informação vital desta resposta do cliente e resuma em uma frase curta e direta para um entregador ler rapidamente no trânsito."
+                },
+                { role: "user", content: mensagemCliente }
+            ],
+            temperature: 0.5,
+        });
+
+        return completion.choices[0].message?.content || "Cliente respondeu, verifique o histórico.";
+    } catch (error) {
+        return "Cliente enviou uma mensagem de texto.";
+    }
+}
+
 /**
  * Envia uma mensagem para um chat específico no Telegram.
  */
@@ -178,39 +226,67 @@ export async function handleWhatsAppWebhook(payload: any) {
         const numeroCliente = payload.data?.key?.remoteJid || payload.data?.message?.key?.remoteJid;
         if (!numeroCliente) return;
 
+        // Marca a mensagem como lida na Evolution API para não ficar pendente
+        if (payload.data?.key?.id && !payload.data?.key?.fromMe) {
+            await fetch(`${EVOLUTION_API_URL}/chat/read/${INSTANCE_NAME}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
+                body: JSON.stringify({ number: numeroCliente.split('@')[0] })
+            });
+        }
+
+        // Se o cliente enviar uma localização, repassa o link do Maps direto para o motoboy
+        const location = payload.data?.message?.locationMessage;
+        if (location) {
+            const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
+            if (rota && rota.telegram_id) {
+                const mapsLink = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+                await sendTelegramMessage(rota.telegram_id, `📍 Localização enviada pelo cliente: ${mapsLink}`);
+                return;
+            }
+        }
+
         const mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;
         if (!mensagemTexto || payload.data?.key?.fromMe) return;
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroCliente.split('@')[0]}]: ${mensagemTexto}`);
 
-        // Tenta encontrar uma rota ativa para este cliente e encaminhar a mensagem para o motoboy
+        // Tenta encontrar uma rota ativa. Se encontrar, resume a mensagem para o motoboy.
         const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
         if (rota && rota.telegram_id) {
-            const mensagemParaMotoboy = `💬 Cliente do pedido #${rota.pedido.id} diz:\n\n"${mensagemTexto}"`;
-            await sendTelegramMessage(rota.telegram_id, mensagemParaMotoboy);
-            broadcastLog('TELEGRAM', `Mensagem do cliente ${numeroCliente.split('@')[0]} encaminhada para o motoboy.`);
-            return; // Impede a IA de responder quando a mensagem é para o motoboy
+            const resumo = await resumirClienteParaMotoboy(mensagemTexto);
+            await sendTelegramMessage(rota.telegram_id, `⚠️ Retorno do Cliente: ${resumo}`);
+            broadcastLog('TELEGRAM', `Resumo do cliente ${numeroCliente.split('@')[0]} enviado ao motoboy.`);
+            return;
         }
 
-        const respostaIA = await processarMensagemIA(mensagemTexto);
+        // Se não houver rota, entra no fluxo de atendimento padrão
+        const config = await getConfiguracoes();
 
-        broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroCliente.split('@')[0]}...`);
-        
-        // CORREÇÃO: Payload atualizado para o formato Evolution 1.8.2
-        await fetch(`${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': GLOBAL_API_KEY
-            },
-            body: JSON.stringify({
-                number: numeroCliente,
-                options: { delay: 1200, presence: "composing" }, // Dá aquele toque de "digitando..."
-                textMessage: { text: respostaIA }
-            })
-        });
+        // Gatilho do Cardápio: Sempre ativo
+        if (mensagemTexto.toLowerCase().includes('cardapio') || mensagemTexto.toLowerCase().includes('menu')) {
+            if (config.link_cardapio) {
+                await enviarMensagemWhatsApp(numeroCliente, config.link_cardapio);
+                broadcastLog('WHATSAPP', `Link do cardápio enviado para ${numeroCliente.split('@')[0]}.`);
+            }
+            return; // Encerra aqui após enviar o cardápio
+        }
 
-        broadcastLog('SUCCESS', `Mensagem enviada com sucesso para ${numeroCliente.split('@')[0]}`);
+        // IA Institucional: Apenas se o auto-responder estiver ligado
+        if (config.auto_responder) {
+            const respostaIA = await processarMensagemIA(mensagemTexto);
+            broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroCliente.split('@')[0]}...`);
+            await fetch(`${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
+                body: JSON.stringify({
+                    number: numeroCliente,
+                    options: { delay: 1200, presence: "composing" },
+                    textMessage: { text: respostaIA }
+                })
+            });
+            broadcastLog('SUCCESS', `Mensagem enviada com sucesso para ${numeroCliente.split('@')[0]}`);
+        }
 
     } catch (error) {
         console.error("Erro no Webhook Handler:", error);
