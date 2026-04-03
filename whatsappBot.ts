@@ -348,9 +348,9 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string): Pro
                 'apikey': GLOBAL_API_KEY
             },
             body: JSON.stringify({
-                number: numero,
-                options: { delay: 1200, presence: "composing" },
-                text: texto
+                number: numero, 
+                options: { delay: 1200, presence: "composing" }, 
+                textMessage: { text: texto } 
             })
         });
 
