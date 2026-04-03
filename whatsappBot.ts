@@ -66,6 +66,23 @@ export async function conectarEvolutionAPI() {
             broadcastLog('ERROR', 'A API respondeu, mas não enviou o QR Code.');
         }
 
+        const appUrl = process.env.APP_URL || "http://localhost:3000";
+        const webhookConfig = {
+            webhook: {
+                url: `${appUrl}/api/whatsapp/webhook`, 
+                byEvents: false,
+                base64: false,
+                events: ["MESSAGES_UPSERT"]
+            }
+        };
+
+        await fetch(`${EVOLUTION_API_URL}/webhook/set/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
+            body: JSON.stringify(webhookConfig)
+        });
+        broadcastLog('WHATSAPP', 'Webhook de recepção configurado na Evolution API.');
+
     } catch (error) {
         broadcastLog('ERROR', 'Falha fatal ao comunicar com a Evolution API.');
         sessionStatus = 'DISCONNECTED';
