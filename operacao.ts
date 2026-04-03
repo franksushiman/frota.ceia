@@ -35,10 +35,8 @@ export async function getRotasMotoboy(telegram_id: string) {
 export async function getRotaPeloCliente(telefoneCliente: string) {
     const numeroLimpo = telefoneCliente.replace(/\D/g, '');
     const rotas = await getRotasAtivas();
-    return rotas.find(r => {
+    return rotas.find((r: any) => {
         const telBanco = (r.pedido?.telefone || r.pedido?.telefone_cliente || r.pedido?.whatsapp || '').replace(/\D/g, '');
-        if (!telBanco) return false;
-        // O endsWith garante que 5531999999999 dê match com 31999999999
         return numeroLimpo.endsWith(telBanco) || telBanco.endsWith(numeroLimpo);
     });
 }
