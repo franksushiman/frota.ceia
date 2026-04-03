@@ -1,7 +1,7 @@
 import { Telegraf, Markup } from 'telegraf';
-import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId } from './database';
+import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId, getPacotes, getPedidos, savePacote } from './database';
 import { broadcastLog } from './logger';
-import { processarBaixaPeloTelegram, getRotasMotoboy, rotasAtivas } from './operacao';
+import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
 import { enviarMensagemWhatsApp } from './whatsappBot';
 
 type Step = 'NOME' | 'CPF' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
@@ -132,7 +132,7 @@ export async function iniciarTelegram() {
         // ==========================================
         bot.hears('💬 Falar com Cliente', async (ctx) => {
             const chatId = ctx.chat.id.toString();
-            const rotas = getRotasMotoboy(chatId);
+            const rotas = await getRotasMotoboy(chatId);
             
             if (rotas.length === 0) return ctx.reply('Não tem nenhuma rota ativa de momento.');
 
@@ -143,7 +143,8 @@ export async function iniciarTelegram() {
         bot.action(/^chat_(.+)$/, async (ctx) => {
             const pedidoId = ctx.match[1];
             const chatId = ctx.chat.id;
-            const rota = getRotasMotoboy(chatId.toString()).find(r => r.pedido.id === pedidoId);
+            const rotas = await getRotasMotoboy(chatId.toString());
+            const rota = rotas.find(r => r.pedido.id === pedidoId);
             
             if (!rota) return ctx.answerCbQuery('Pedido não encontrado ou já finalizado.');
             
@@ -168,17 +169,29 @@ export async function iniciarTelegram() {
             await ctx.editMessageText(ctx.callbackQuery.message?.text + '\n\n✅ *ROTA ACEITE!* Pode iniciar o deslocamento.', { parse_mode: 'Markdown', disable_web_page_preview: true });
             await ctx.answerCbQuery('Rota Aceite!');
 
-            const rotasDoPacote = rotasAtivas.filter(r => r.pacoteId === pacoteId);
-            if (rotasDoPacote.length > 0) {
+            const pacotesRaw = await getPacotes();
+            const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+            const pacote = pacotes.find((p: any) => p.id === pacoteId);
+            const pedidosRaw = await getPedidos();
+            const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+
+            if (pacote) {
+                pacote.motoboy = { telegram_id: ctx.from.id.toString(), nome: ctx.from.first_name };
+                pacote.status = 'EM_ROTA';
+                await savePacote(pacote);
+
                 let detalheMsg = '📝 *DETALHES DA ROTA:*\n\n';
-                rotasDoPacote.forEach((rota, index) => {
-                    const p = rota.pedido;
-                    const wazeLink = `https://waze.com/ul?q=${encodeURIComponent(p.endereco)}`;
-                    const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(p.endereco)}`;
-                    detalheMsg += `*Cliente ${index + 1}: ${p.nomeCliente}*\n`;
-                    detalheMsg += `📍 ${p.endereco}\n`;
-                    detalheMsg += `[🗺️ Waze](${wazeLink}) | [📍 Maps](${mapsLink})\n\n`;
-                });
+                let index = 0;
+                for (const pId of pacote.pedidosIds || []) {
+                    const p = pedidos.find((ped: any) => ped.id === pId);
+                    if (p) {
+                        const wazeLink = `https://waze.com/ul?q=${encodeURIComponent(p.endereco)}`;
+                        const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(p.endereco)}`;
+                        detalheMsg += `*Cliente ${++index}: ${p.cliente_nome || p.nomeCliente || 'Cliente'}*\n`;
+                        detalheMsg += `📍 ${p.endereco}\n`;
+                        detalheMsg += `[🗺️ Waze](${wazeLink}) | [📍 Maps](${mapsLink})\n\n`;
+                    }
+                }
                 detalheMsg += `💡 Ao chegar, peça o *código de 4 dígitos* ao cliente e digite aqui para dar baixa.`;
                 await ctx.reply(detalheMsg, { parse_mode: 'Markdown', disable_web_page_preview: true });
             }
@@ -187,12 +200,15 @@ export async function iniciarTelegram() {
         bot.action(/^recusar_(.+)$/, async (ctx) => {
             const pacoteId = ctx.match[1];
             
-            // Remove da memória para impedir que ele dê baixa
-            const rotasParaRemover = getRotasMotoboy(ctx.from.id.toString()).filter(r => r.pacoteId === pacoteId);
-            rotasParaRemover.forEach(r => {
-                const idx = rotasAtivas.indexOf(r);
-                if (idx > -1) rotasAtivas.splice(idx, 1);
-            });
+            const pacotesRaw = await getPacotes();
+            const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+            const pacote = pacotes.find((p: any) => p.id === pacoteId);
+     
+            if (pacote) {
+                pacote.motoboy = null;
+                pacote.status = 'PENDENTE_ACEITE';
+                await savePacote(pacote);
+            }
             
             broadcastLog('RECUSA_ROTA', `O motoboy ${ctx.from.first_name} RECUSOU o Pacote #${pacoteId.split('_')[1].substring(6)}.`, { pacoteId });
             await ctx.editMessageText('❌ *ROTA RECUSADA*. Foi devolvida para a base.', { parse_mode: 'Markdown' });
@@ -240,18 +256,29 @@ export async function iniciarTelegram() {
                     await ctx.reply('✅ Localização recebida! A sua rota está a ser preparada...');
                     const pacoteId = session.data.pacote_id_nuvem;
                     if (pacoteId) {
-                        const rotasDoPacote = rotasAtivas.filter(r => r.pacoteId === pacoteId);
-                        if (rotasDoPacote.length > 0) {
-                            rotasDoPacote.forEach(r => r.telegram_id = chatId.toString());
+                        const pacotesRaw = await getPacotes();
+                        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+                        const pacote = pacotes.find((p: any) => p.id === pacoteId);
+                        const pedidosRaw = await getPedidos();
+                        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+
+                        if (pacote) {
+                            pacote.motoboy = { telegram_id: chatId.toString(), nome: motoboy.nome };
+                            pacote.status = 'EM_ROTA';
+                            await savePacote(pacote);
+
                             let detalheMsg = '📝 *DETALHES DA ROTA:*\n\n';
-                            rotasDoPacote.forEach((rota, index) => {
-                                const p = rota.pedido;
-                                const wazeLink = `https://waze.com/ul?q=${encodeURIComponent(p.endereco)}`;
-                                const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(p.endereco)}`;
-                                detalheMsg += `*Cliente ${index + 1}: ${p.nomeCliente}*\n`;
-                                detalheMsg += `📍 ${p.endereco}\n`;
-                                detalheMsg += `[🗺️ Waze](${wazeLink}) | [📍 Maps](${mapsLink})\n\n`;
-                            });
+                            let index = 0;
+                            for (const pId of pacote.pedidosIds || []) {
+                                const p = pedidos.find((ped: any) => ped.id === pId);
+                                if (p) {
+                                    const wazeLink = `https://waze.com/ul?q=${encodeURIComponent(p.endereco)}`;
+                                    const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(p.endereco)}`;
+                                    detalheMsg += `*Cliente ${++index}: ${p.cliente_nome || p.nomeCliente || 'Cliente'}*\n`;
+                                    detalheMsg += `📍 ${p.endereco}\n`;
+                                    detalheMsg += `[🗺️ Waze](${wazeLink}) | [📍 Maps](${mapsLink})\n\n`;
+                                }
+                            }
                             detalheMsg += `💡 Ao chegar, peça o *código de 4 dígitos* ao cliente e digite aqui para dar baixa.`;
                             await ctx.reply(detalheMsg, { parse_mode: 'Markdown', disable_web_page_preview: true, ...defaultKeyboard });
                             delete userSessions[chatId];
