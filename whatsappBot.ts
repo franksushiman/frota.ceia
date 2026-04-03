@@ -11,7 +11,7 @@ export let qrCodeBase64: string | null = null;
 export let sessionStatus: string = 'DISCONNECTED';
 
 // Configurações exatas do seu Docker v1.8.2
-const EVOLUTION_API_URL = 'http://127.0.0.1:8081'; 
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://127.0.0.1:8081'; 
 const INSTANCE_NAME = 'CeiaBot';
 const GLOBAL_API_KEY = 'CEIA_CHAVE_MESTRA_2026'; 
 
