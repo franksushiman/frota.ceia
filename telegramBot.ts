@@ -341,6 +341,10 @@ export async function iniciarTelegram() {
                         try {
                             const sentMessage = await ctx.reply("Processando e reescrevendo para o cliente...");
                             const textoProfissional = await traduzirMotoboyParaCliente(text);
+                            if (textoProfissional.trim().toUpperCase() === 'IGNORAR') {
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "Sinal recebido (IA optou por não incomodar o cliente).");
+                                return;
+                            }
                             await enviarMensagemWhatsApp('55' + num, textoProfissional);
                             await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
                         } catch (e) {
