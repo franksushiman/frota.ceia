@@ -364,7 +364,12 @@
 
     <div id="notification-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>
 
+    <div id="modal-confirmacao" class="modal-overlay"><div class="modal-card" style="width: 350px; text-align: center;"><h3 style="margin-top:0; color:var(--text-dark);">Atenção</h3><p id="confirm-msg" style="color: var(--text-light); margin-bottom: 20px; font-size: 0.95rem;"></p><div style="display: flex; gap: 10px;"><button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-confirmacao')">Cancelar</button><button id="btn-confirm-action" class="btn btn-del" style="width: 50%; border: none;">Confirmar</button></div></div></div>
+
     <script>
+        let acaoConfirmacao = null;
+        function confirmarAcao(mensagem, callback) { document.getElementById('confirm-msg').innerText = mensagem; acaoConfirmacao = callback; document.getElementById('modal-confirmacao').style.display = 'flex'; }
+
         let telegramIdSOSAtual = null;
 
         function abrirModalSOS() {
@@ -617,11 +622,11 @@
         }
 
         function deletarPacote(pacId) {
-            if(confirm("Deseja desfazer este pacote? Os pedidos voltarão para a fila da coluna 1.")) {
+            confirmarAcao("Deseja desfazer este pacote? Os pedidos voltarão para a fila da coluna 1.", async () => {
                 pacotes = pacotes.filter(p => p.id !== pacId);
                 salvarKanbanStorage();
                 renderizarKanban();
-            }
+            });
         }
 
         function renderizarKanban() {
@@ -766,11 +771,11 @@
         }
 
         function removerPedidoDefinitivo(id) {
-            if(confirm("Excluir este pedido do sistema?")) {
+            confirmarAcao("Excluir este pedido do sistema?", async () => {
                 pedidos = pedidos.filter(p => p.id !== id);
                 salvarKanbanStorage();
                 renderizarKanban();
-            }
+            });
         }
 
         async function abrirModalDespacho(pacId) {
@@ -838,7 +843,7 @@
         }
 
         function finalizarEntregaUnica(pacId, pedId) {
-            if (confirm("Confirmar a entrega na porta deste cliente?")) {
+            confirmarAcao("Confirmar a entrega na porta deste cliente?", async () => {
                 try {
                     fetch('/api/operacao/baixa', {
                         method: 'POST',
@@ -847,7 +852,7 @@
                     });
                 } catch(e) {}
                 baixarPedidoPeloSistema(pedId);
-            }
+            });
         }
 
         function baixarPedidoPeloSistema(pedId) {
@@ -1200,10 +1205,10 @@
         }
 
         async function excluirMotoboy(id) {
-            if(confirm("Excluir este motoboy?")) {
+            confirmarAcao("Excluir este motoboy?", async () => {
                 await fetch(`/api/fleet/${id}`, { method: 'DELETE' });
                 carregarFrota();
-            }
+            });
         }
 
         function abrirModalEditar(id, vinculo, veiculo) {
@@ -1261,11 +1266,11 @@
         }
 
         async function zerarAcerto() {
-            if(confirm("Confirma pagamento?")) {
+            confirmarAcao("Confirma pagamento?", async () => {
                 await fetch(`/api/financeiro/pagar/${financeiroAtual}`, { method: 'POST' });
                 fecharModal('modal-financeiro');
                 showToast('Liquidado!');
-            }
+            });
         }
 
         function fecharModal(id) {
@@ -1314,6 +1319,7 @@
         }
 
         window.onload = async () => {
+            document.getElementById('btn-confirm-action').addEventListener('click', () => { fecharModal('modal-confirmacao'); if (acaoConfirmacao) acaoConfirmacao(); });
             carregarKanbanStorage();
             carregarFrota();
             connectWS();

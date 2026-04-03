@@ -206,7 +206,7 @@ export async function iniciarTelegram() {
      
             if (pacote) {
                 pacote.motoboy = null;
-                pacote.status = 'PENDENTE_ACEITE';
+                pacote.status = 'AGUARDANDO';
                 await savePacote(pacote);
             }
             
