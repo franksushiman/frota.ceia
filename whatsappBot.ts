@@ -1,3 +1,4 @@
+import os from 'os';
 import OpenAI, { toFile } from 'openai';
 import { getConfiguracoes, getMotoboysOnline } from './database'; 
 import { getRotaPeloCliente } from './operacao';
@@ -14,6 +15,18 @@ export let sessionStatus: string = 'DISCONNECTED';
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://127.0.0.1:8081'; 
 const INSTANCE_NAME = 'CeiaBot';
 const GLOBAL_API_KEY = 'CEIA_CHAVE_MESTRA_2026'; 
+
+function getMachineIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name] || []) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '127.0.0.1';
+}
 
 /**
  * Cria a instância na Evolution API e solicita o QR Code com tratamento de erros
@@ -66,12 +79,13 @@ export async function conectarEvolutionAPI() {
             broadcastLog('ERROR', 'A API respondeu, mas não enviou o QR Code.');
         }
 
-        const appUrl = process.env.APP_URL || "http://localhost:3000";
+        const appUrl = `http://${getMachineIP()}:3000`;
         const webhookConfig = {
             webhook: {
-                url: `${appUrl}/api/whatsapp/webhook`, 
+                url: `${appUrl}/api/whatsapp/webhook`,
                 byEvents: false,
-                base64: false,
+                base64: true, 
+                readMessage: true, 
                 events: ["MESSAGES_UPSERT"]
             }
         };
@@ -275,6 +289,7 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
 
 export async function handleWhatsAppWebhook(payload: any) {
     try {
+        console.log("🔔 [WEBHOOK] Bateu no webhook! Recebendo dados...");
         const numeroCliente = payload.data?.key?.remoteJid || payload.data?.message?.key?.remoteJid;
         if (!numeroCliente) return;
 
