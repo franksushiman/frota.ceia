@@ -339,16 +339,23 @@ export async function iniciarTelegram() {
                     const num = session.data.telefone_cliente?.replace(/\D/g, '');
                     if (num) {
                         try {
+                            console.log(`[DEBUG CHAT] Motoboy digitou: "${text}"`);
                             const sentMessage = await ctx.reply("Processando e reescrevendo para o cliente...");
+                            
                             const textoProfissional = await traduzirMotoboyParaCliente(text);
-                            if (textoProfissional.trim().toUpperCase() === 'IGNORAR') {
+                            console.log(`[DEBUG CHAT] Resposta da IA: "${textoProfissional}"`);
+                        
+                            if (textoProfissional.trim().toUpperCase().includes('IGNORAR')) {
+                                console.log(`[DEBUG CHAT] 🛑 IA bloqueou o envio (considerou irrelevante).`);
                                 await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "Sinal recebido (IA optou por não incomodar o cliente).");
                                 return;
                             }
+                        
+                            console.log(`[DEBUG CHAT] 🟢 IA aprovou. Disparando para o WhatsApp...`);
                             await enviarMensagemWhatsApp('55' + num, textoProfissional);
                             await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
                         } catch (e) {
-                            console.error("[DEBUG WHATSAPP] Erro na API ou IA:", e);
+                            console.error("[DEBUG WHATSAPP] Erro CRÍTICO na API ou IA:", e);
                             await ctx.reply("❌ Falha ao enviar a mensagem. Verifique a conexão.");
                         }
                     } else {
