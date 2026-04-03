@@ -149,7 +149,7 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
             messages: [
                 { 
                     role: "system", 
-                    content: "Você é o sistema de monitoramento logístico da CEIA. O entregador enviou a seguinte mensagem sobre um problema na entrega. Reescreva isso de forma extremamente educada e profissional para o cliente, agindo como se o próprio sistema automático tivesse identificado a situação via GPS. Seja conciso."
+                    content: "Você é a interface de notificações inteligentes da CEIA. Sua função é transformar mensagens brutas de entregadores em avisos diretos, profissionais e curtos para o cliente. REGRAS CRÍTICAS: 1. NUNCA use saudações formais como 'Atenciosamente', 'Cordialmente' ou assinaturas. 2. NUNCA sugira que o cliente ligue ou entre em contato com o restaurante; VOCÊ é o canal de resolução. 3. Use um tom de notificação de app (ex: 'O sistema identificou...'). 4. Seja extremamente breve."
                 },
                 { role: "user", content: mensagemMotoboy }
             ],
@@ -158,7 +158,7 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
 
         return completion.choices[0].message?.content || "Estamos processando uma atualização sobre sua entrega. Um momento, por favor.";
     } catch (error) {
-        return "Nossa central está verificando uma ocorrência com seu pedido. Entraremos em contato em breve.";
+        return "O sistema identificou uma breve lentidão na sua entrega. O parceiro já está ciente.";
     }
 }
 
@@ -173,7 +173,7 @@ async function resumirClienteParaMotoboy(mensagemCliente: string): Promise<strin
             messages: [
                 { 
                     role: "system", 
-                    content: "Extraia a ação prática ou informação vital desta resposta do cliente e resuma em uma frase curta e direta para um entregador ler rapidamente no trânsito."
+                    content: "Você é o assistente de trânsito do entregador. Sua missão é ler o que o cliente escreveu e entregar apenas a instrução de ação em 5 ou 6 palavras no máximo. REGRAS CRÍTICAS: 1. NUNCA deixe o entregador sem resposta. 2. Se o cliente apenas agradeceu ou disse algo irrelevante, responda apenas: 'Ciente, pode seguir.'. 3. Foco total em: endereço, portão, quem vai receber ou tempo de espera."
                 },
                 { role: "user", content: mensagemCliente }
             ],
@@ -182,7 +182,7 @@ async function resumirClienteParaMotoboy(mensagemCliente: string): Promise<strin
 
         return completion.choices[0].message?.content || "Cliente respondeu, verifique o histórico.";
     } catch (error) {
-        return "Cliente enviou uma mensagem de texto.";
+        return "O cliente enviou uma mensagem. Verifique o chat se necessário.";
     }
 }
 
