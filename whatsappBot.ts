@@ -179,7 +179,7 @@ export async function handleWhatsAppWebhook(payload: any) {
         broadcastLog('WHATSAPP', `Recebido de [${numeroCliente.split('@')[0]}]: ${mensagemTexto}`);
 
         // Tenta encontrar uma rota ativa para este cliente e encaminhar a mensagem para o motoboy
-        const rota = getRotaPeloCliente(numeroCliente.split('@')[0]);
+        const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
         if (rota && rota.telegram_id) {
             const mensagemParaMotoboy = `💬 Cliente do pedido #${rota.pedido.id} diz:\n\n"${mensagemTexto}"`;
             await sendTelegramMessage(rota.telegram_id, mensagemParaMotoboy);

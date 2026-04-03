@@ -33,7 +33,11 @@ export async function getRotasMotoboy(telegram_id: string) {
 export async function getRotaPeloCliente(telefoneCliente: string) {
     const numeroLimpo = telefoneCliente.replace(/\D/g, '');
     const rotas = await getRotasAtivas();
-    return rotas.find(r => r.pedido?.telefone?.replace(/\D/g, '') === numeroLimpo);
+    return rotas.find(r => {
+        const tel = r.pedido?.telefone?.replace(/\D/g, '');
+        if (!tel) return false;
+        return numeroLimpo.endsWith(tel) || tel.endsWith(numeroLimpo);
+    });
 }
 
 export async function processarBaixaPeloTelegram(telegram_id: string, codigo: string): Promise<boolean> {
