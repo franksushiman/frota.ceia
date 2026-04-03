@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { getConfiguracoes, getMotoboysOnline } from './database'; 
 import { getRotaPeloCliente } from './operacao';
 import { broadcastLog } from './logger';
@@ -186,6 +186,41 @@ async function resumirClienteParaMotoboy(mensagemCliente: string): Promise<strin
     }
 }
 
+async function transcreverAudioWhatsApp(messageData: any): Promise<string> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error("OpenAI Key não configurada para transcrição.");
+
+        const res = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': GLOBAL_API_KEY },
+            body: JSON.stringify({ message: messageData })
+        });
+
+        if (!res.ok) throw new Error("Falha ao buscar base64 da mídia na Evolution API.");
+
+        const mediaData = await res.json();
+        const base64Data = mediaData.base64;
+        if (!base64Data) throw new Error("Base64 não encontrado na resposta da API.");
+
+        const buffer = Buffer.from(base64Data, 'base64');
+        const file = await toFile(buffer, 'audio.ogg', { type: 'audio/ogg' });
+        
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const transcription = await openai.audio.transcriptions.create({
+            file,
+            model: 'whisper-1',
+        });
+
+        return transcription.text || "";
+
+    } catch (error) {
+        console.error("Erro ao transcrever áudio:", error);
+        broadcastLog('ERROR', 'Falha no processo de transcrição de áudio.');
+        return ""; // Retorna string vazia em caso de falha para não quebrar o fluxo
+    }
+}
+
 /**
  * Envia uma mensagem para um chat específico no Telegram.
  */
@@ -246,7 +281,16 @@ export async function handleWhatsAppWebhook(payload: any) {
             }
         }
 
-        const mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;
+        let mensagemTexto = payload.data?.message?.conversation || payload.data?.message?.extendedTextMessage?.text;
+        const isAudio = !!payload.data?.message?.audioMessage || !!payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+        
+        // Se for áudio, transcreve e o resultado se torna a mensagem principal a ser processada
+        if (isAudio) {
+            broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
+            mensagemTexto = await transcreverAudioWhatsApp(payload.data);
+        }
+
+        // Se após tudo não houver texto (nem original, nem transcrito) ou a msg for nossa, encerra.
         if (!mensagemTexto || payload.data?.key?.fromMe) return;
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroCliente.split('@')[0]}]: ${mensagemTexto}`);
@@ -255,7 +299,11 @@ export async function handleWhatsAppWebhook(payload: any) {
         const rota = await getRotaPeloCliente(numeroCliente.split('@')[0]);
         if (rota && rota.telegram_id) {
             const resumo = await resumirClienteParaMotoboy(mensagemTexto);
-            await sendTelegramMessage(rota.telegram_id, `⚠️ Retorno do Cliente: ${resumo}`);
+            if (isAudio) {
+                await sendTelegramMessage(rota.telegram_id, "🎙️ Áudio do Cliente (Resumo):\n" + resumo);
+            } else {
+                await sendTelegramMessage(rota.telegram_id, `⚠️ Retorno do Cliente: ${resumo}`);
+            }
             broadcastLog('TELEGRAM', `Resumo do cliente ${numeroCliente.split('@')[0]} enviado ao motoboy.`);
             return;
         }
