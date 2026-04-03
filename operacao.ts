@@ -34,9 +34,10 @@ export async function getRotaPeloCliente(telefoneCliente: string) {
     const numeroLimpo = telefoneCliente.replace(/\D/g, '');
     const rotas = await getRotasAtivas();
     return rotas.find(r => {
-        const tel = r.pedido?.telefone?.replace(/\D/g, '');
-        if (!tel) return false;
-        return numeroLimpo.endsWith(tel) || tel.endsWith(numeroLimpo);
+        const telBanco = (r.pedido?.telefone || r.pedido?.telefone_cliente || r.pedido?.whatsapp || '').replace(/\D/g, '');
+        if (!telBanco) return false;
+        // O endsWith garante que 5531999999999 dê match com 31999999999
+        return numeroLimpo.endsWith(telBanco) || telBanco.endsWith(numeroLimpo);
     });
 }
 
