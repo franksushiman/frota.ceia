@@ -1,5 +1,6 @@
 import { startServer } from './server';
 import { initDatabase } from './database';
+import { iniciarWhatsApp } from './whatsappBot';
 
 async function bootstrap() {
     try {
@@ -7,6 +8,7 @@ async function bootstrap() {
         
         // 1. PRIMEIRO o banco
         await initDatabase();
+        iniciarWhatsApp();
         
         // 2. DEPOIS o servidor
         await startServer();
