@@ -140,14 +140,6 @@ export async function startServer() {
 
         await enviarConviteRotaTelegram(motoboy.telegram_id, msgMotoboy, pacoteId);
 
-        for (const p of pedidos) {
-            const num = p.telefone.replace(/\D/g, '');
-            if (num.length >= 10) {
-                const msgCliente = `Olá, ${p.nomeCliente.split(' ')[0]}! O seu pedido acabou de sair para entrega com o parceiro *${motoboy.nome}* (${motoboy.veiculo}). 🛵💨\n\n⚠️ *Atenção:* Para a segurança da sua entrega, informe o código *${p.codigo_entrega}* ao motoboy quando ele chegar.`;
-                await enviarMensagemWhatsApp('55' + num, msgCliente);
-            }
-        }
-
         await broadcastLog('SISTEMA', `Convite de rota enviado para ${motoboy.nome}. Aguardando aceite.`);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
