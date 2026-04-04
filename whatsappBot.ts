@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -29,9 +29,10 @@ export async function iniciarWhatsApp() {
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
+    const { version } = await fetchLatestBaileysVersion();
     sock = makeWASocket({
         auth: state,
-        version: [2, 3000, 1015901307], // Força a versão atualizada e funcional
+        version: version,
         logger: pino({ level: 'silent' }), // Silencia os logs vermelhos do Baileys
         browser: Browsers.macOS('Desktop'),
         syncFullHistory: false
