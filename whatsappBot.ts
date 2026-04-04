@@ -175,15 +175,27 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string): Pro
             return false;
         }
 
-        let idEnvio = numero;
-        // O Baileys exige o sufixo @s.whatsapp.net para envios
-        if (!idEnvio.includes('@s.whatsapp.net')) {
-            idEnvio = normalizePhone(numero) + '@s.whatsapp.net';
+        let numeroLimpo = normalizePhone(numero);
+
+        // Evita bug do 5555 caso o número já venha com 55 do banco de dados/telegram
+        if (numeroLimpo.startsWith('5555')) {
+            numeroLimpo = numeroLimpo.substring(2);
+        } else if (numeroLimpo.length === 10 || numeroLimpo.length === 11) {
+            numeroLimpo = '55' + numeroLimpo;
         }
 
-        // Simulando que o robô está digitando para ficar natural
+        let idEnvio = numeroLimpo + '@s.whatsapp.net';
+
+        // O Segredo: Pergunta para o servidor do WhatsApp qual é o ID exato (resolve o 9º dígito)
+        try {
+            const query = await sock.onWhatsApp(numeroLimpo);
+            if (query && query.length > 0 && query[0].exists) {
+                idEnvio = query[0].jid;
+            }
+        } catch (e) {}
+
         await sock.sendPresenceUpdate('composing', idEnvio);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Aguarda 1.5s
+        await new Promise(resolve => setTimeout(resolve, 1500));
         await sock.sendPresenceUpdate('paused', idEnvio);
 
         await sock.sendMessage(idEnvio, { text: texto });
