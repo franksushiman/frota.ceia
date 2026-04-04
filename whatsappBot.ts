@@ -33,6 +33,12 @@ function normalizePhone(input: string): string {
     return input.includes('@') ? input.split('@')[0] : input.replace(/\D/g, '');
 }
 
+// Retorna os últimos 8 dígitos numéricos de um JID/LID para fuzzy matching
+function getCoreId(jid: string): string {
+    if (!jid) return '';
+    return jid.replace(/\D/g, '').slice(-8);
+}
+
 export async function iniciarWhatsApp() {
     sessionStatus = 'CONNECTING';
     qrCodeBase64 = null;
@@ -133,18 +139,19 @@ export async function iniciarWhatsApp() {
         }
 
         // 2. Fallback Semântico via Cache de Contexto
-        console.log(`[ROTEAMENTO] JID ${numeroCliente} não encontrado no DB. Buscando no Cache...`);
-        if (numeroCliente && contextCache.has(numeroCliente)) {
-            const contexto = contextCache.get(numeroCliente)!;
-            console.log(`[ROTEAMENTO] Contexto encontrado! Telegram ID: ${contexto.telegramId}. Validando com IA...`);
+        const jidBruto = msg.key.remoteJid;
+        const buscaKey = getCoreId(jidBruto!);
+        console.log(`[ROTEAMENTO] JID ${jidBruto} não encontrado no DB. Buscando chave no cache: ${buscaKey}`);
 
-            const pertenceAoMotoboy = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage);
-
-            if (pertenceAoMotoboy) {
-                const resumoLogistico = await resumirRespostaClienteParaMotoboy(mensagemTexto);
-                await sendTelegramMessage(contexto.telegramId, `⚠️ Retorno do Cliente: ${resumoLogistico}`);
-                console.log(`[ROTEAMENTO] Sucesso! Mensagem enviada para o Telegram ${contexto.telegramId}`);
-                contextCache.delete(numeroCliente);
+        if (contextCache.has(buscaKey)) {
+            const contexto = contextCache.get(buscaKey)!;
+            const isRespostaRelevante = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage);
+            
+            if (isRespostaRelevante) {
+                const resumoIA = await resumirRespostaClienteParaMotoboy(mensagemTexto);
+                await sendTelegramMessage(contexto.telegramId, "⚠️ Retorno: " + resumoIA);
+                broadcastLog('TELEGRAM', `Resposta do cliente [${numeroNormalizado}] roteada para ${contexto.telegramId} via Fallback.`);
+                contextCache.delete(buscaKey);
                 return;
             }
         }
@@ -211,16 +218,17 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, tele
 
         const sentMsg: proto.IWebMessageInfo = await sock.sendMessage(idEnvio, { text: texto });
         const realJid = sentMsg.key.remoteJid;
-        console.log(`[CACHE] Armazenando contexto para JID: ${realJid}`);
-
+        
         if (realJid && telegramId !== 'SISTEMA') {
-            contextCache.set(realJid, {
+            const cacheKey = getCoreId(realJid);
+            console.log(`[CACHE] Armazenando contexto para chave: ${cacheKey}`);
+            contextCache.set(cacheKey, {
                 telegramId: telegramId,
                 lastMotoboyMessage: motoboyMessage,
                 timestamp: Date.now()
             });
             setTimeout(() => {
-                contextCache.delete(realJid);
+                contextCache.delete(cacheKey);
             }, 15 * 60 * 1000); // 15 minutes TTL
         }
 
@@ -356,8 +364,8 @@ async function resumirRespostaClienteParaMotoboy(respostaCliente: string): Promi
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
-                { role: 'system', content: "Você é um operador de rádio. Resuma para o motoboy em 5 palavras. Ex: 'Cliente ciente' ou 'Confirmou endereço'. NUNCA fale com o cliente." },
-                { role: 'user', content: `O cliente disse: '${respostaCliente}'` }
+                { role: 'system', content: "O cliente enviou uma mensagem. Resuma para o motoboy em 6 palavras. NUNCA use 'espero que esteja bem' ou 'informe ao cliente'. Exemplo: 'Cliente ciente, aguardando troca'." },
+                { role: 'user', content: `O cliente enviou: '${respostaCliente}'` }
             ],
             temperature: 0.2,
         });
