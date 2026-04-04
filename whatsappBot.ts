@@ -348,27 +348,29 @@ async function gerarRastreioHumanizado(codigo: string, config: any): Promise<str
         const frota = await getFleet();
         const motoboyDb = frota.find((m: any) => m.telegram_id === telegramId);
 
+        let tempoEstimado = "em breve";
         let localizacaoAtual = "a caminho";
 
-        // EXTRAÇÃO DA RUA EXATA VIA GOOGLE MAPS:
-        if (motoboyDb && motoboyDb.lat && motoboyDb.lng && config.google_maps_key) {
+        // CÁLCULO DE ROTA E TEMPO (DISTANCE MATRIX API):
+        if (motoboyDb && motoboyDb.lat && motoboyDb.lng && config.google_maps_key && pedidoEncontrado.endereco) {
             try {
-                const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${motoboyDb.lat},${motoboyDb.lng}&key=${config.google_maps_key}`);
-                const geoData = await geoRes.json();
-                if (geoData.results && geoData.results.length > 0) {
-                    const rua = geoData.results[0].address_components.find((c: any) => c.types.includes('route'))?.long_name;
-                    const bairro = geoData.results[0].address_components.find((c: any) => c.types.includes('sublocality'))?.long_name;
+                const origin = `${motoboyDb.lat},${motoboyDb.lng}`;
+                const destination = encodeURIComponent(pedidoEncontrado.endereco);
+                const dmUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${destination}&key=${config.google_maps_key}&language=pt-BR`;
+                
+                const dmRes = await fetch(dmUrl);
+                const dmData = await dmRes.json();
+                
+                if (dmData.status === 'OK' && dmData.rows[0].elements[0].status === 'OK') {
+                    // Extrai o tempo (ex: "15 minutos")
+                    tempoEstimado = dmData.rows[0].elements[0].duration.text;
                     
-                    if (rua && bairro) {
-                        localizacaoAtual = `na ${rua}, bairro ${bairro}`;
-                    } else if (rua) {
-                        localizacaoAtual = `na ${rua}`;
-                    } else {
-                        localizacaoAtual = `em ${geoData.results[0].formatted_address.split(',')[0]}`;
-                    }
+                    // Extrai a região aproximada do motoboy limpando o endereço completo
+                    const enderecoOrigem = dmData.origin_addresses[0];
+                    localizacaoAtual = enderecoOrigem.split(',')[1]?.trim() || enderecoOrigem.split('-')[0]?.trim() || "na sua região";
                 }
             } catch (e) {
-                console.error("[DEBUG MAPS] Erro ao buscar rua:", e);
+                console.error("[DEBUG MAPS] Erro ao calcular ETA:", e);
             }
         }
 
@@ -376,12 +378,12 @@ async function gerarRastreioHumanizado(codigo: string, config: any): Promise<str
         const completion = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
-                { role: 'system', content: `Você é o atendente do restaurante. O entregador chama-se ${primeiroNome} e no momento ele está ${localizacaoAtual} com o pedido do cliente. Crie uma mensagem curta (máximo 15 palavras), humanizada e calorosa avisando que a comida está chegando. Diga o nome do entregador e o local exato onde ele está. NÃO ofereça ajuda extra.` }
+                { role: 'system', content: `Você é o rádio comunicador amigável do restaurante. O entregador ${primeiroNome} está passando por ${localizacaoAtual}. O GPS informa que ele chegará em exatamente ${tempoEstimado}. Escreva uma resposta curta (máx 20 palavras), informando o tempo de chegada. Seja direto e não ofereça ajuda extra.` }
             ],
-            temperature: 0.5,
+            temperature: 0.3,
         });
         
-        return completion.choices[0].message?.content || `O entregador ${primeiroNome} está ${localizacaoAtual} com o seu pedido!`;
+        return completion.choices[0].message?.content || `O entregador ${primeiroNome} está a caminho e chega em ${tempoEstimado}!`;
     } catch (e) {
         console.error("[DEBUG RASTREIO] Erro geral:", e);
         return "Seu pedido já saiu para entrega e está a caminho!";
