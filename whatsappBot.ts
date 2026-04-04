@@ -5,7 +5,7 @@ import pino from 'pino';
 import OpenAI, { toFile } from 'openai';
 import fs from 'fs';
 
-import { getConfiguracoes, getMotoboysOnline } from './database';
+import { getConfiguracoes, getMotoboysOnline, getPedidos, getPacotes } from './database';
 import { getRotaPeloCliente } from './operacao';
 import { broadcastLog } from './logger';
 
@@ -20,6 +20,33 @@ interface ChatContext {
   timestamp: number;
 }
 const contextCache = new Map<string, ChatContext>();
+
+interface CustomerSession {
+  mode: 'BOT' | 'WAITING_CODE' | 'HUMAN';
+  timeout: NodeJS.Timeout;
+}
+const customerSessionCache = new Map<string, CustomerSession>();
+
+function manageCustomerSession(jid: string): CustomerSession {
+    if (customerSessionCache.has(jid)) {
+        const session = customerSessionCache.get(jid)!;
+        clearTimeout(session.timeout);
+        session.timeout = setTimeout(() => {
+            customerSessionCache.delete(jid);
+            broadcastLog('INFO', `Sessão de atendimento para ${jid} expirou.`);
+        }, 15 * 60 * 1000); // 15 min TTL
+        return session;
+    }
+    const newSession: CustomerSession = {
+        mode: 'BOT',
+        timeout: setTimeout(() => {
+            customerSessionCache.delete(jid);
+            broadcastLog('INFO', `Sessão de atendimento para ${jid} expirou.`);
+        }, 15 * 60 * 1000)
+    };
+    customerSessionCache.set(jid, newSession);
+    return newSession;
+}
 
 // =============================================================================
 //                      CONTROLE DE SESSÃO E CONEXÃO (BAILEYS)
@@ -163,21 +190,62 @@ export async function iniciarWhatsApp() {
             }
         }
 
-        // 3. Roteamento Padrão (IA geral, cardápio, etc.)
-        const config = await getConfiguracoes();
-        if (mensagemTexto.toLowerCase().includes('cardapio') || mensagemTexto.toLowerCase().includes('menu')) {
-            if (config.link_cardapio) {
-                await enviarMensagemWhatsApp(numeroCliente, config.link_cardapio, 'SISTEMA', 'pediu_cardapio');
-                broadcastLog('WHATSAPP', `Link do cardápio enviado para ${numeroNormalizado}.`);
+        // 3. Auto-Atendimento e Transbordo Humano
+        const session = manageCustomerSession(jidBruto);
+
+        if (session.mode === 'HUMAN') {
+            broadcastLog('SAC_MSG', mensagemTexto, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
+            return;
+        }
+
+        if (session.mode === 'WAITING_CODE') {
+            if (mensagemTexto.match(/^\d{4}$/)) {
+                const pedidosRaw = await getPedidos();
+                const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+                const pacotesRaw = await getPacotes();
+                const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+                
+                const pedidoEncontrado = pedidos.find((p: any) => p.codigo_entrega === mensagemTexto);
+                if (pedidoEncontrado) {
+                    const pacoteDoPedido = pacotes.find((pac: any) => pac.pedidosIds.includes(pedidoEncontrado.id));
+                    let status = "Seu pedido está em preparação na loja.";
+                    if (pacoteDoPedido) {
+                        if (pacoteDoPedido.status === 'EM_ROTA') {
+                            status = `Seu pedido já saiu para entrega com o motoboy ${pacoteDoPedido.motoboy?.nome || 'designado'}.`;
+                        } else if (pacoteDoPedido.status === 'PENDENTE_ACEITE') {
+                            status = `Estamos aguardando a confirmação do motoboy ${pacoteDoPedido.motoboy?.nome || 'designado'} para iniciar a sua entrega.`;
+                        }
+                    }
+                    await enviarMensagemWhatsApp(numeroCliente, `✅ Localizei! ${status}`, 'SISTEMA', 'status_pedido', 'BOT');
+                    session.mode = 'BOT';
+                } else {
+                    await enviarMensagemWhatsApp(numeroCliente, "❌ Código não encontrado. Por favor, verifique e tente novamente.", 'SISTEMA', 'codigo_invalido', 'BOT');
+                }
+            } else {
+                await enviarMensagemWhatsApp(numeroCliente, "Por favor, digite apenas o código de 4 dígitos que você recebeu.", 'SISTEMA', 'formato_invalido', 'BOT');
             }
             return;
         }
 
+        // Se chegou até aqui, o modo é 'BOT'
+        const config = await getConfiguracoes();
         if (config.auto_responder) {
             const respostaIA = await processarMensagemIA(mensagemTexto);
-            broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroNormalizado}...`);
-            await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', mensagemTexto);
-            broadcastLog('SUCCESS', `Mensagem enviada com sucesso para ${numeroNormalizado}`);
+
+            if (respostaIA.includes('[ACTION_TRACKING]')) {
+                session.mode = 'WAITING_CODE';
+                await enviarMensagemWhatsApp(numeroCliente, "Para localizar sua entrega, por favor, digite o código de 4 dígitos do seu pedido.", 'SISTEMA', 'pede_codigo', 'BOT');
+                return;
+            }
+
+            if (respostaIA.includes('[ACTION_HUMAN]')) {
+                session.mode = 'HUMAN';
+                broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
+                await enviarMensagemWhatsApp(numeroCliente, "Um de nossos atendentes já vai falar com você. Aguarde um instante.", 'SISTEMA', 'transfere_humano', 'BOT');
+                return;
+            }
+            
+            await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', mensagemTexto, 'BOT');
         }
     });
 }
@@ -186,7 +254,7 @@ export async function iniciarWhatsApp() {
 //                      DISPARO ATIVO (MODO FANTASMA)
 // =============================================================================
 
-export async function enviarMensagemWhatsApp(numero: string, texto: string, telegramId: string, motoboyMessage: string, motoboyName: string, retryCount = 0): Promise<string | null> {
+export async function enviarMensagemWhatsApp(numero: string, texto: string, telegramId: string = 'SISTEMA', motoboyMessage: string = 'envio_sistema', motoboyName: string = 'CEIA', retryCount = 0): Promise<string | null> {
     try {
         // Se estiver conectando, segura a mensagem e tenta de novo a cada 2s (máx 10s)
         if (sessionStatus === 'CONNECTING' && retryCount < 5) {
@@ -278,17 +346,21 @@ async function obterStatusLogistico(): Promise<string> {
 async function processarMensagemIA(mensagemCliente: string): Promise<string> {
     try {
         const config = await getConfiguracoes();
-        const radarStatus = await obterStatusLogistico();
         if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
+
+        const horariosFormatados = config.horarios ? Object.entries(config.horarios)
+            .filter(([, val]: any) => val.on)
+            .map(([dia, val]: any) => `${dia.charAt(0).toUpperCase() + dia.slice(1)}: ${val.abre} às ${val.fecha}`)
+            .join(', ') : 'Não informado.';
 
         const openai = new OpenAI({ apiKey: config.openai_key });
         const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4o-mini',
             messages: [
-                { role: 'system', content: `Você é a interface automática da CEIA. Seja prestativo, rápido e use os dados do radar: [${radarStatus}]. NUNCA use saudações formais, não assine a mensagem e não peça para o cliente entrar em contato com o restaurante.` },
+                { role: 'system', content: `Você é o assistente virtual do estabelecimento ${config.nome || 'nosso restaurante'}. Nossas informações úteis: Endereço: ${config.endereco || 'Não informado'}. Horários: ${horariosFormatados}. Cardápio: ${config.link_cardapio || 'Não disponível online'}. REGRAS: Se o cliente quiser fazer um pedido, oriente a usar o link do cardápio. Se perguntar sobre entrega/pedido, retorne ESTRITAMENTE a tag: [ACTION_TRACKING]. Se exigir falar com um humano/atendente, retorne ESTRITAMENTE a tag: [ACTION_HUMAN]. Se perguntar algo fora de contexto (política, piadas), ignore ou diga que não pode ajudar.` },
                 { role: 'user', content: mensagemCliente }
             ],
-            temperature: 0.7,
+            temperature: 0.5,
         });
         return completion.choices[0].message?.content || 'Desculpe, tive um problema ao processar sua resposta.';
     } catch (error) {

@@ -118,6 +118,10 @@
         ⚠️ <span id="sos-text"></span> (Clique para abrir o Chat)
     </div>
 
+    <div id="sac-banner" onclick="abrirModalSAC()" style="position: fixed; top: 0; left: 0; width: 100%; background: #06b6d4; color: white; text-align: center; padding: 15px; font-weight: bold; z-index: 9999; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; transition: 0.2s;">
+        💬 <span id="sac-text"></span> (Clique para atender)
+    </div>
+
     <audio id="beep-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
     <div class="sidebar">
@@ -302,13 +306,26 @@
     <div id="modal-chat-sos" class="modal-overlay">
         <div class="modal-card" style="width: 500px; display: flex; flex-direction: column; height: 70vh;">
             <h3 style="margin-top:0; color:#ef4444; margin-bottom: 15px;">🚨 Central de Apoio (SOS)</h3>
-            <div id="chat-history" style="flex: 1; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+            <div id="chat-history-sos" style="flex: 1; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
                 </div>
             <div style="display: flex; gap: 10px;">
-                <input type="text" id="chat-input" class="form-control" placeholder="Digite a instrução para o motoboy..." style="flex: 1; margin-bottom: 0;">
+                <input type="text" id="chat-input-sos" class="form-control" placeholder="Digite a instrução para o motoboy..." style="flex: 1; margin-bottom: 0;">
                 <button class="btn" style="width: auto; padding: 0 20px;" onclick="enviarMensagemSOS()">Enviar</button>
             </div>
-            <button class="btn btn-del" style="margin-top: 15px;" onclick="telegramIdSOSAtual = null; document.getElementById('chat-history').innerHTML = ''; fecharModal('modal-chat-sos');">Encerrar Conversa de Emergência</button>
+            <button class="btn btn-del" style="margin-top: 15px;" onclick="telegramIdSOSAtual = null; document.getElementById('chat-history-sos').innerHTML = ''; fecharModal('modal-chat-sos');">Encerrar Conversa de Emergência</button>
+        </div>
+    </div>
+
+    <div id="modal-chat-sac" class="modal-overlay">
+        <div class="modal-card" style="width: 500px; display: flex; flex-direction: column; height: 70vh;">
+            <h3 style="margin-top:0; color:#06b6d4; margin-bottom: 15px;">💬 Atendimento ao Cliente</h3>
+            <div id="chat-history-sac" style="flex: 1; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+                </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="chat-input-sac" class="form-control" placeholder="Digite a resposta para o cliente..." style="flex: 1; margin-bottom: 0;">
+                <button class="btn" style="width: auto; padding: 0 20px;" onclick="enviarMensagemSAC()">Enviar</button>
+            </div>
+            <button class="btn btn-edit" style="margin-top: 15px;" onclick="jidSACAtual = null; document.getElementById('chat-history-sac').innerHTML = ''; fecharModal('modal-chat-sac');">Encerrar Atendimento</button>
         </div>
     </div>
 
@@ -371,21 +388,20 @@
         function confirmarAcao(mensagem, callback) { document.getElementById('confirm-msg').innerText = mensagem; acaoConfirmacao = callback; document.getElementById('modal-confirmacao').style.display = 'flex'; }
 
         let telegramIdSOSAtual = null;
+        let jidSACAtual = null;
 
         function abrirModalSOS() {
             document.getElementById('sos-banner').style.display = 'none';
             document.getElementById('modal-chat-sos').style.display = 'flex';
         }
 
-        function encerrarSOS() {
-            document.getElementById('modal-chat-sos').style.display = 'none';
-            document.getElementById('chat-history').innerHTML = '';
-            telegramIdSOSAtual = null;
-            showToast('Conversa de emergência encerrada.');
+        function abrirModalSAC() {
+            document.getElementById('sac-banner').style.display = 'none';
+            document.getElementById('modal-chat-sac').style.display = 'flex';
         }
 
         async function enviarMensagemSOS() {
-            const input = document.getElementById('chat-input');
+            const input = document.getElementById('chat-input-sos');
             const msg = input.value.trim();
             if (!msg) return;
             if (!telegramIdSOSAtual) {
@@ -404,8 +420,30 @@
                 showToast('Falha ao enviar mensagem para o motoboy.', 'error');
             }
 
-            const hist = document.getElementById('chat-history');
+            const hist = document.getElementById('chat-history-sos');
             hist.innerHTML += `<div style="align-self: flex-end; background: var(--accent); color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${msg}</div>`;
+            hist.scrollTop = hist.scrollHeight;
+            input.value = '';
+        }
+
+        async function enviarMensagemSAC() {
+            const input = document.getElementById('chat-input-sac');
+            const msg = input.value.trim();
+            if (!msg || !jidSACAtual) return;
+
+            try {
+                await fetch('/api/sac/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid: jidSACAtual, texto: msg })
+                });
+            } catch (e) {
+                console.error(e);
+                return showToast('Falha ao enviar mensagem para o cliente.', 'error');
+            }
+
+            const hist = document.getElementById('chat-history-sac');
+            hist.innerHTML += `<div style="align-self: flex-end; background: #0891b2; color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${msg}</div>`;
             hist.scrollTop = hist.scrollHeight;
             input.value = '';
         }
@@ -1038,7 +1076,7 @@
 
                     if (log.tipo === 'SOS_MSG') {
                         telegramIdSOSAtual = log.telegram_id;
-                        const hist = document.getElementById('chat-history');
+                        const hist = document.getElementById('chat-history-sos');
                         hist.innerHTML += `<div style="align-self: flex-start; background: #f1f5f9; color: #0f172a; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${log.mensagem}</div>`;
                         hist.scrollTop = hist.scrollHeight;
                     }
@@ -1047,12 +1085,24 @@
                         document.getElementById('sos-text').innerText = log.mensagem;
                         document.getElementById('sos-banner').style.display = 'block';
 
-                        const hist = document.getElementById('chat-history');
+                        const hist = document.getElementById('chat-history-sos');
                         hist.innerHTML += `<div style="align-self: flex-start; background: #ef4444; color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;"><b>Motoboy:</b> ${log.mensagem}</div>`;
                         hist.scrollTop = hist.scrollHeight;
 
                         const beep = document.getElementById('beep-sound');
                         beep.play().catch(e => console.log('Áudio bloqueado'));
+                    }
+                    else if (log.tipo === 'SAC_REQUEST') {
+                        jidSACAtual = log.jid;
+                        document.getElementById('sac-text').innerText = log.mensagem;
+                        document.getElementById('sac-banner').style.display = 'block';
+                        document.getElementById("beep-sound").play();
+                    }
+                    else if (log.tipo === 'SAC_MSG') {
+                        jidSACAtual = log.jid;
+                        const hist = document.getElementById('chat-history-sac');
+                        hist.innerHTML += `<div style="align-self: flex-start; background: #f1f5f9; color: #0f172a; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;"><b>${log.nome || 'Cliente'}:</b> ${log.mensagem}</div>`;
+                        hist.scrollTop = hist.scrollHeight;
                     }
                     else if (log.tipo === 'ACEITE_ROTA') {
                         const pac = pacotes.find(p => p.id === log.pacoteId);
