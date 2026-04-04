@@ -159,6 +159,15 @@ export async function startServer() {
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
+    app.post('/api/sac/reply', async (request: any, reply) => {
+        const { jid, texto } = request.body;
+        const sucesso = await enviarMensagemWhatsApp(jid, texto, 'SISTEMA', 'atendimento_humano', 'Atendente');
+        if (sucesso) {
+            return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+        }
+        return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no envio da mensagem via WhatsApp.' });
+    });
+
     app.post('/api/operacao/baixa', async (request: any, reply) => {
         const { pedidoId } = request.body;
 
