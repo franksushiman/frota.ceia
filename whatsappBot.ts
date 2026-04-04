@@ -15,6 +15,7 @@ import { broadcastLog } from './logger';
 
 interface ChatContext {
   telegramId: string;
+  motoboyName: string;
   lastMotoboyMessage: string;
   timestamp: number;
 }
@@ -138,21 +139,27 @@ export async function iniciarWhatsApp() {
             return;
         }
 
-        // 2. Fallback Semântico via Cache de Contexto
-        const jidBruto = msg.key.remoteJid;
-        const buscaKey = getCoreId(jidBruto!);
-        console.log(`[ROTEAMENTO] JID ${jidBruto} não encontrado no DB. Buscando chave no cache: ${buscaKey}`);
+        // 2. Roteamento Semântico via Cache de Contexto
+        const jidBruto = msg.key.remoteJid!;
+        if (contextCache.size > 0) {
+            console.log(`[DEBUG] Tentando match semântico para a resposta: '${mensagemTexto}'`);
 
-        if (contextCache.has(buscaKey)) {
-            const contexto = contextCache.get(buscaKey)!;
-            const isRespostaRelevante = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage);
-            
-            if (isRespostaRelevante) {
-                const resumoIA = await resumirRespostaClienteParaMotoboy(mensagemTexto);
-                await sendTelegramMessage(contexto.telegramId, "⚠️ Retorno: " + resumoIA);
-                broadcastLog('TELEGRAM', `Resposta do cliente [${numeroNormalizado}] roteada para ${contexto.telegramId} via Fallback.`);
-                contextCache.delete(buscaKey);
-                return;
+            const contextosAtivos = Array.from(contextCache.entries())
+                .map(([key, value]) => ({ ...value, originalJid: key }));
+
+            const telegramIdMatch = await analisarRespostaComContextoIA(mensagemTexto, contextosAtivos);
+
+            if (telegramIdMatch && telegramIdMatch !== 'NAO') {
+                const contextoEncontrado = contextosAtivos.find(c => c.telegramId === telegramIdMatch);
+                if (contextoEncontrado) {
+                    console.log(`[DEBUG] Match encontrado! Encaminhando para motoboy ${contextoEncontrado.motoboyName}`);
+                    const resumoTecnico = await resumirRespostaClienteParaMotoboy(mensagemTexto);
+                    await sendTelegramMessage(contextoEncontrado.telegramId, `⚠️ Retorno do Cliente: ${resumoTecnico}`);
+                    
+                    contextCache.delete(contextoEncontrado.originalJid);
+                    broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada para ${contextoEncontrado.motoboyName} via Roteamento Semântico.`);
+                    return;
+                }
             }
         }
 
@@ -179,13 +186,13 @@ export async function iniciarWhatsApp() {
 //                      DISPARO ATIVO (MODO FANTASMA)
 // =============================================================================
 
-export async function enviarMensagemWhatsApp(numero: string, texto: string, telegramId: string, motoboyMessage: string, retryCount = 0): Promise<string | null> {
+export async function enviarMensagemWhatsApp(numero: string, texto: string, telegramId: string, motoboyMessage: string, motoboyName: string, retryCount = 0): Promise<string | null> {
     try {
         // Se estiver conectando, segura a mensagem e tenta de novo a cada 2s (máx 10s)
         if (sessionStatus === 'CONNECTING' && retryCount < 5) {
             console.log(`[WHATSAPP] Aguardando inicialização do aparelho para disparar... (${retryCount + 1}/5)`);
             await new Promise(resolve => setTimeout(resolve, 2000));
-            return enviarMensagemWhatsApp(numero, texto, telegramId, motoboyMessage, retryCount + 1);
+            return enviarMensagemWhatsApp(numero, texto, telegramId, motoboyMessage, motoboyName, retryCount + 1);
         }
 
         if (sessionStatus !== 'CONNECTED' || !sock) {
@@ -220,15 +227,15 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, tele
         const realJid = sentMsg.key.remoteJid;
         
         if (realJid && telegramId !== 'SISTEMA') {
-            const cacheKey = getCoreId(realJid);
-            console.log(`[CACHE] Armazenando contexto para chave: ${cacheKey}`);
-            contextCache.set(cacheKey, {
+            console.log(`[CACHE] Armazenando contexto para JID: ${realJid}`);
+            contextCache.set(realJid, {
                 telegramId: telegramId,
+                motoboyName: motoboyName,
                 lastMotoboyMessage: motoboyMessage,
                 timestamp: Date.now()
             });
             setTimeout(() => {
-                contextCache.delete(cacheKey);
+                contextCache.delete(realJid);
             }, 15 * 60 * 1000); // 15 minutes TTL
         }
 
@@ -309,29 +316,31 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
     }
 }
 
-async function analisarRespostaComContextoIA(respostaCliente: string, perguntaMotoboy: string): Promise<boolean> {
+async function analisarRespostaComContextoIA(respostaCliente: string, contextos: (ChatContext & { originalJid: string })[]): Promise<string> {
     try {
         const config = await getConfiguracoes();
         if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
 
+        const listaDeContextos = contextos
+            .map(c => `telegramId: ${c.telegramId} | Motoboy: ${c.motoboyName} | Pergunta: "${c.lastMotoboyMessage}"`)
+            .join('\n');
+
+        const prompt = `Um cliente acaba de enviar a seguinte resposta: '${respostaCliente}'.\nTemos os seguintes motoboys aguardando retorno:\n${listaDeContextos}\n\nEssa resposta faz sentido para qual dessas perguntas? Responda ESTRITAMENTE com o 'telegramId' correspondente, ou retorne a palavra 'NAO' se a resposta não fizer sentido para nenhum dos contextos.`;
+
         const openai = new OpenAI({ apiKey: config.openai_key });
-        const prompt = `Responda apenas SIM ou NAO. O cliente disse '${respostaCliente}' em resposta a '${perguntaMotoboy}'?`;
-        
         const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4-turbo-preview',
             messages: [
-                { role: 'system', content: "Você é um robô de análise de contexto. Responda APENAS 'SIM' ou 'NAO'." },
+                { role: 'system', content: "Você é um roteador lógico. Analise a resposta do cliente e os contextos pendentes. Sua resposta deve ser apenas o 'telegramId' do motoboy correspondente ou a palavra 'NAO'." },
                 { role: 'user', content: prompt }
             ],
             temperature: 0.0,
-            max_tokens: 3,
         });
 
-        const resposta = completion.choices[0].message?.content || 'NAO';
-        return resposta.toUpperCase().includes('SIM');
+        return completion.choices[0].message?.content || 'NAO';
     } catch (error) {
         console.error("Erro na análise de contexto da IA:", error);
-        return false;
+        return 'NAO';
     }
 }
 
@@ -364,8 +373,8 @@ async function resumirRespostaClienteParaMotoboy(respostaCliente: string): Promi
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
-                { role: 'system', content: "O cliente enviou uma mensagem. Resuma para o motoboy em 6 palavras. NUNCA use 'espero que esteja bem' ou 'informe ao cliente'. Exemplo: 'Cliente ciente, aguardando troca'." },
-                { role: 'user', content: `O cliente enviou: '${respostaCliente}'` }
+                { role: 'system', content: "Você é o rádio comunicador da frota. Traduza a mensagem do cliente em uma mensagem curta e técnica para o motoboy (máximo 6 palavras). NUNCA fale com o cliente. Saída esperada ex: 'Cliente confirmou, está ciente'." },
+                { role: 'user', content: `O cliente disse: '${respostaCliente}'` }
             ],
             temperature: 0.2,
         });
