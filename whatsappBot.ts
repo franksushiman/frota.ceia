@@ -277,24 +277,26 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, tele
             return null;
         }
 
-        let numeroLimpo = normalizePhone(numero);
+        let idEnvio = numero;
 
-        // Evita bug do 5555 caso o número já venha com 55 do banco de dados/telegram
-        if (numeroLimpo.startsWith('5555')) {
-            numeroLimpo = numeroLimpo.substring(2);
-        } else if (numeroLimpo.length === 10 || numeroLimpo.length === 11) {
-            numeroLimpo = '55' + numeroLimpo;
-        }
-
-        let idEnvio = numeroLimpo + '@s.whatsapp.net';
-
-        // O Segredo: Pergunta para o servidor do WhatsApp qual é o ID exato (resolve o 9º dígito)
-        try {
-            const query = await sock.onWhatsApp(numeroLimpo);
-            if (query && query.length > 0 && query[0].exists) {
-                idEnvio = query[0].jid;
+        // SÓ formata e concatena se NÃO for um ID de rede já pronto
+        if (!numero.includes('@')) {
+            let numeroLimpo = normalizePhone(numero);
+            if (numeroLimpo.startsWith('5555')) {
+                numeroLimpo = numeroLimpo.substring(2);
+            } else if (numeroLimpo.length === 10 || numeroLimpo.length === 11) {
+                numeroLimpo = '55' + numeroLimpo;
             }
-        } catch (e) {}
+            idEnvio = numeroLimpo + '@s.whatsapp.net';
+            
+            // Consulta opcional apenas para números de telefone clássicos
+            try {
+                const query = await sock.onWhatsApp(numeroLimpo);
+                if (query && query.length > 0 && query[0].exists) {
+                    idEnvio = query[0].jid;
+                }
+            } catch (e) {}
+        }
 
         await sock.sendPresenceUpdate('composing', idEnvio);
         await new Promise(resolve => setTimeout(resolve, 1500));
