@@ -10,6 +10,30 @@ import { getRotaPeloCliente } from './operacao';
 import { broadcastLog } from './logger';
 
 // =============================================================================
+//                      CONTROLE DE CONTEXTO DE CHAT
+// =============================================================================
+
+interface ChatContext {
+    telegram_id_motoboy: string;
+    nome_motoboy: string;
+    ultima_pergunta: string;
+}
+
+const chatContextCache: Record<string, ChatContext> = {};
+
+// Cria um "ticket" de conversa, vinculando o JID do cliente ao motoboy por 15min
+export function vincularContextoChat(jid: string, telegramId: string, nomeMotoboy: string, pergunta: string) {
+    chatContextCache[jid] = {
+        telegram_id_motoboy: telegramId,
+        nome_motoboy: nomeMotoboy,
+        ultima_pergunta: pergunta,
+    };
+    setTimeout(() => {
+        delete chatContextCache[jid];
+    }, 15 * 60 * 1000); 
+}
+
+// =============================================================================
 //                      CONTROLE DE SESSÃO E CONEXÃO (BAILEYS)
 // =============================================================================
 
@@ -84,6 +108,34 @@ export async function iniciarWhatsApp() {
 
         const numeroCliente = msg.key.remoteJid;
         if (!numeroCliente || numeroCliente === 'status@broadcast') return;
+
+        // 1. Roteamento de Resposta Direta para o Motoboy (Via Contexto de Chat)
+        if (chatContextCache[numeroCliente]) {
+            const contexto = chatContextCache[numeroCliente];
+            let mensagemTexto = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+            const isAudio = !!(msg.message.audioMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage);
+
+            if (isAudio) {
+                try {
+                    const config = await getConfiguracoes();
+                    if (!config.openai_key) throw new Error('OpenAI Key não configurada para transcrição.');
+                    const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: undefined });
+                    const file = await toFile(buffer as Buffer, 'audio.ogg', { type: 'audio/ogg' });
+                    const openai = new OpenAI({ apiKey: config.openai_key });
+                    const transcription = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
+                    mensagemTexto = transcription.text || '';
+                } catch (err) { console.error("Erro na transcrição de resposta direta:", err); }
+            }
+
+            if (mensagemTexto) {
+                const resumo = await resumirRespostaClienteParaMotoboy(mensagemTexto, contexto.ultima_pergunta, contexto.nome_motoboy);
+                const prefixo = isAudio ? '🎙️ Cliente respondeu (áudio):\n' : '💬 Cliente respondeu:\n';
+                await sendTelegramMessage(contexto.telegram_id_motoboy, `${prefixo}"${resumo}"`);
+                broadcastLog('TELEGRAM', `Resposta do cliente [${normalizePhone(numeroCliente)}] roteada para motoboy ${contexto.nome_motoboy}.`);
+                delete chatContextCache[numeroCliente];
+            }
+            return; // FINALIZA O PROCESSAMENTO AQUI
+        }
 
         const numeroNormalizado = normalizePhone(numeroCliente);
 
@@ -169,7 +221,7 @@ export async function iniciarWhatsApp() {
 //                      DISPARO ATIVO (MODO FANTASMA)
 // =============================================================================
 
-export async function enviarMensagemWhatsApp(numero: string, texto: string, retryCount = 0): Promise<boolean> {
+export async function enviarMensagemWhatsApp(numero: string, texto: string, retryCount = 0): Promise<string | null> {
     try {
         // Se estiver conectando, segura a mensagem e tenta de novo a cada 2s (máx 10s)
         if (sessionStatus === 'CONNECTING' && retryCount < 5) {
@@ -180,7 +232,7 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, retr
 
         if (sessionStatus !== 'CONNECTED' || !sock) {
             console.error('[WHATSAPP] Tentativa de envio falhou: Sessão desconectada.');
-            return false;
+            return null;
         }
 
         let numeroLimpo = normalizePhone(numero);
@@ -207,10 +259,10 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, retr
         await sock.sendPresenceUpdate('paused', idEnvio);
 
         await sock.sendMessage(idEnvio, { text: texto });
-        return true;
+        return idEnvio;
     } catch (error) {
         console.error('Erro ao disparar WhatsApp nativo:', error);
-        return false;
+        return null;
     }
 }
 
@@ -297,6 +349,26 @@ async function resumirClienteParaMotoboy(mensagemCliente: string): Promise<strin
                 { role: 'user', content: mensagemCliente }
             ],
             temperature: 0.5,
+        });
+        return completion.choices[0].message?.content || 'Cliente respondeu, verifique o histórico.';
+    } catch (error) {
+        return 'O cliente enviou uma mensagem. Verifique o chat se necessário.';
+    }
+}
+
+async function resumirRespostaClienteParaMotoboy(respostaCliente: string, perguntaMotoboy: string, nomeMotoboy: string): Promise<string> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                { role: 'system', content: `Você é o rádio comunicador da CEIA. O motoboy ${nomeMotoboy} perguntou: "${perguntaMotoboy}". O cliente respondeu: "${respostaCliente}". Sua missão é criar um resumo direto e acionável para o motoboy em 10 palavras ou menos. Se a resposta for um simples "ok" ou agradecimento, responda apenas "Cliente ciente.". Não use saudações.` },
+                { role: 'user', content: `Resuma a resposta do cliente para o motoboy ${nomeMotoboy}.` }
+            ],
+            temperature: 0.3,
         });
         return completion.choices[0].message?.content || 'Cliente respondeu, verifique o histórico.';
     } catch (error) {
