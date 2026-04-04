@@ -124,10 +124,12 @@ export async function iniciarWhatsApp() {
     sock.ev.on('messages.upsert', async (m: any) => {
         if (m.type !== 'notify') return;
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
         const numeroCliente = msg.key.remoteJid;
-        if (!numeroCliente || numeroCliente === 'status@broadcast') return;
+
+        // Filtro Anti-Grupo / Anti-Spam
+        if (!msg.message || msg.key.fromMe || !numeroCliente || numeroCliente.endsWith('@g.us') || numeroCliente.endsWith('@broadcast')) {
+            return;
+        }
 
         const numeroNormalizado = normalizePhone(numeroCliente);
         await sock!.readMessages([msg.key]);
@@ -225,7 +227,8 @@ export async function iniciarWhatsApp() {
             }
         }
 
-        // Se chegou até aqui, o modo é 'BOT'
+        // Passo C: Se não caiu em nenhuma das opções acima, a mensagem vai para a IA de auto-atendimento.
+        console.log('[DEBUG] Mensagem não atrelada a motoboy. Enviando para IA de Auto-Atendimento...');
         const config = await getConfiguracoes();
         if (config.auto_responder) {
             const respostaIA = await processarMensagemIA(mensagemTexto);
