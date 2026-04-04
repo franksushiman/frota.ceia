@@ -231,22 +231,31 @@ export async function iniciarWhatsApp() {
         console.log('[DEBUG] Mensagem não atrelada a motoboy. Enviando para IA de Auto-Atendimento...');
         const config = await getConfiguracoes();
         if (config.auto_responder) {
-            const respostaIA = await processarMensagemIA(mensagemTexto);
+            try {
+                console.log('[DEBUG] 🧠 Chamando motor da OpenAI (processarMensagemIA)...');
+                const respostaIA = await processarMensagemIA(mensagemTexto);
+                console.log(`[DEBUG] 🤖 Resposta gerada pela IA: "${respostaIA}"`);
 
-            if (respostaIA.includes('[ACTION_TRACKING]')) {
-                session.mode = 'WAITING_CODE';
-                await enviarMensagemWhatsApp(numeroCliente, "Para localizar sua entrega, por favor, digite o código de 4 dígitos do seu pedido.", 'SISTEMA', 'pede_codigo', 'BOT');
-                return;
-            }
+                if (respostaIA.includes('[ACTION_TRACKING]')) {
+                    session.mode = 'WAITING_CODE';
+                    await enviarMensagemWhatsApp(numeroCliente, "Para localizar sua entrega, por favor, digite o código de 4 dígitos do seu pedido.", 'SISTEMA', 'pede_codigo', 'BOT');
+                    return;
+                }
 
-            if (respostaIA.includes('[ACTION_HUMAN]')) {
-                session.mode = 'HUMAN';
-                broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
-                await enviarMensagemWhatsApp(numeroCliente, "Um de nossos atendentes já vai falar com você. Aguarde um instante.", 'SISTEMA', 'transfere_humano', 'BOT');
-                return;
+                if (respostaIA.includes('[ACTION_HUMAN]')) {
+                    session.mode = 'HUMAN';
+                    broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
+                    await enviarMensagemWhatsApp(numeroCliente, "Um de nossos atendentes já vai falar com você. Aguarde um instante.", 'SISTEMA', 'transfere_humano', 'BOT');
+                    return;
+                }
+                
+                console.log('[DEBUG] 📤 Disparando mensagem de volta para o WhatsApp...');
+                await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', 'SISTEMA_AUTO_ATENDIMENTO', 'BOT');
+                console.log('[DEBUG] ✅ Mensagem enviada com sucesso ao cliente!');
+
+            } catch (error) {
+                console.error('[ERRO FATAL] Falha na execução do Auto-Atendimento:', error);
             }
-            
-            await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', mensagemTexto, 'BOT');
         }
     });
 }
@@ -365,6 +374,7 @@ async function processarMensagemIA(mensagemCliente: string): Promise<string> {
         });
         return completion.choices[0].message?.content || 'Desculpe, tive um problema ao processar sua resposta.';
     } catch (error) {
+        console.error('[ERRO OPENAI]', error);
         return 'Olá! Nosso sistema está passando por uma manutenção rápida.';
     }
 }
