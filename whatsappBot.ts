@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, fetchLatestBaileysVersion, proto, WASocket } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -14,24 +14,12 @@ import { broadcastLog } from './logger';
 // =============================================================================
 
 interface ChatContext {
-    telegram_id_motoboy: string;
-    nome_motoboy: string;
-    ultima_pergunta: string;
+  telegramId: string;
+  motoboyName: string;
+  lastMotoboyMessage: string;
+  timestamp: number;
 }
-
-const chatContextCache: Record<string, ChatContext> = {};
-
-// Cria um "ticket" de conversa, vinculando o JID do cliente ao motoboy por 15min
-export function vincularContextoChat(jid: string, telegramId: string, nomeMotoboy: string, pergunta: string) {
-    chatContextCache[jid] = {
-        telegram_id_motoboy: telegramId,
-        nome_motoboy: nomeMotoboy,
-        ultima_pergunta: pergunta,
-    };
-    setTimeout(() => {
-        delete chatContextCache[jid];
-    }, 15 * 60 * 1000); 
-}
+const contextCache = new Map<string, ChatContext>();
 
 // =============================================================================
 //                      CONTROLE DE SESSÃO E CONEXÃO (BAILEYS)
@@ -39,7 +27,7 @@ export function vincularContextoChat(jid: string, telegramId: string, nomeMotobo
 
 export let qrCodeBase64: string | null = null;
 export let sessionStatus: string = 'DISCONNECTED';
-let sock: any = null;
+let sock: WASocket | null = null;
 
 function normalizePhone(input: string): string {
     if (!input) return '';
@@ -101,108 +89,70 @@ export async function iniciarWhatsApp() {
     //                           RECEBIMENTO DE MENSAGENS NATIVO
     // =============================================================================
     sock.ev.on('messages.upsert', async (m: any) => {
-        if (m.type !== 'notify') return; // Filtra apenas mensagens novas reais
-
+        if (m.type !== 'notify') return;
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return; // Ignora os seus próprios envios
+        if (!msg.message || msg.key.fromMe) return;
 
         const numeroCliente = msg.key.remoteJid;
         if (!numeroCliente || numeroCliente === 'status@broadcast') return;
 
-        // 1. Roteamento de Resposta Direta para o Motoboy (Via Contexto de Chat)
-        if (chatContextCache[numeroCliente]) {
-            const contexto = chatContextCache[numeroCliente];
-            let mensagemTexto = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-            const isAudio = !!(msg.message.audioMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage);
-
-            if (isAudio) {
-                try {
-                    const config = await getConfiguracoes();
-                    if (!config.openai_key) throw new Error('OpenAI Key não configurada para transcrição.');
-                    const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: undefined });
-                    const file = await toFile(buffer as Buffer, 'audio.ogg', { type: 'audio/ogg' });
-                    const openai = new OpenAI({ apiKey: config.openai_key });
-                    const transcription = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
-                    mensagemTexto = transcription.text || '';
-                } catch (err) { console.error("Erro na transcrição de resposta direta:", err); }
-            }
-
-            if (mensagemTexto) {
-                const resumo = await resumirRespostaClienteParaMotoboy(mensagemTexto, contexto.ultima_pergunta, contexto.nome_motoboy);
-                const prefixo = isAudio ? '🎙️ Cliente respondeu (áudio):\n' : '💬 Cliente respondeu:\n';
-                await sendTelegramMessage(contexto.telegram_id_motoboy, `${prefixo}"${resumo}"`);
-                broadcastLog('TELEGRAM', `Resposta do cliente [${normalizePhone(numeroCliente)}] roteada para motoboy ${contexto.nome_motoboy}.`);
-                delete chatContextCache[numeroCliente];
-            }
-            return; // FINALIZA O PROCESSAMENTO AQUI
-        }
-
         const numeroNormalizado = normalizePhone(numeroCliente);
-
-        // Marca a mensagem como lida (Tira o "1" da tela do celular)
-        await sock.readMessages([msg.key]);
+        await sock!.readMessages([msg.key]);
 
         const isAudio = !!(msg.message.audioMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage);
         const location = msg.message.locationMessage;
         let mensagemTexto = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '';
 
-        // Tratamento de Localização
-        if (location) {
-            const rota = await getRotaPeloCliente(numeroNormalizado);
-            if (rota && rota.telegram_id) {
-                const mapsLink = `https://www.google.com/maps?q=$${location.degreesLatitude},${location.degreesLongitude}`;
-                await sendTelegramMessage(rota.telegram_id, `📍 Localização enviada pelo cliente: ${mapsLink}`);
-                return;
-            }
-        }
-
-        // Tratamento e Transcrição de Áudio (Agora mais rápido com Baileys)
-        if (isAudio) {
-            broadcastLog('WHATSAPP', 'Áudio recebido, iniciando transcrição...');
+        if (isAudio && !mensagemTexto) {
             try {
                 const config = await getConfiguracoes();
                 if (!config.openai_key) throw new Error('OpenAI Key não configurada para transcrição.');
-                
-                // Baixa o áudio diretamente na memória sem precisar da Evolution
                 const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: undefined });
                 const file = await toFile(buffer as Buffer, 'audio.ogg', { type: 'audio/ogg' });
-        
                 const openai = new OpenAI({ apiKey: config.openai_key });
-                const transcription = await openai.audio.transcriptions.create({
-                    file,
-                    model: 'whisper-1',
-                });
+                const transcription = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
                 mensagemTexto = transcription.text || '';
-            } catch (err) {
-                console.error("Erro na transcrição:", err);
-                broadcastLog('ERROR', 'Falha no processo de transcrição de áudio.');
-                return;
-            }
+            } catch (err) { console.error("Erro na transcrição:", err); }
         }
 
-        if (!mensagemTexto) return;
+        if (!mensagemTexto && !location) return;
+        broadcastLog('WHATSAPP', `Recebido de [${numeroNormalizado}]: ${mensagemTexto || 'Localização'}`);
 
-        broadcastLog('WHATSAPP', `Recebido de [${numeroNormalizado}]: ${mensagemTexto}`);
-
+        // 1. Roteamento Primário via Banco de Dados (Rota Ativa)
         const rota = await getRotaPeloCliente(numeroNormalizado);
-
-        // Redirecionamento da mensagem (Para o Motoboy ou para a IA)
         if (rota && rota.telegram_id) {
-            const resumo = await resumirClienteParaMotoboy(mensagemTexto);
-            if (isAudio) {
-                await sendTelegramMessage(rota.telegram_id, '🎙️ Áudio do Cliente (Resumo):\n' + resumo);
-            } else {
-                await sendTelegramMessage(rota.telegram_id, `⚠️ Retorno do Cliente: ${resumo}`);
+            if (location) {
+                const mapsLink = `https://www.google.com/maps?q=${location.degreesLatitude},${location.degreesLongitude}`;
+                await sendTelegramMessage(rota.telegram_id, `📍 Localização enviada pelo cliente: ${mapsLink}`);
+                return;
             }
+            const resumo = await resumirClienteParaMotoboy(mensagemTexto);
+            const prefixo = isAudio ? '🎙️ Áudio do Cliente (Resumo):\n' : '⚠️ Retorno do Cliente: ';
+            await sendTelegramMessage(rota.telegram_id, prefixo + resumo);
             broadcastLog('TELEGRAM', `Resumo do cliente ${numeroNormalizado} enviado ao motoboy.`);
             return;
         }
 
-        const config = await getConfiguracoes();
+        // 2. Fallback Semântico via Cache de Contexto
+        if (contextCache.has(numeroCliente)) {
+            const contexto = contextCache.get(numeroCliente)!;
+            const telegramIdDaIA = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage, numeroCliente, contexto.telegramId);
 
+            if (telegramIdDaIA) {
+                const resumo = await resumirRespostaClienteParaMotoboy(mensagemTexto, contexto.lastMotoboyMessage, contexto.motoboyName);
+                const prefixo = isAudio ? '🎙️ Cliente respondeu (áudio):\n' : '💬 Cliente respondeu:\n';
+                await sendTelegramMessage(telegramIdDaIA, `${prefixo}"${resumo}"`);
+                broadcastLog('TELEGRAM', `Resposta do cliente [${numeroNormalizado}] roteada para motoboy ${contexto.motoboyName} via Fallback Semântico.`);
+                contextCache.delete(numeroCliente);
+                return; // FINALIZA O PROCESSAMENTO AQUI
+            }
+        }
+
+        // 3. Roteamento Padrão (IA geral, cardápio, etc.)
+        const config = await getConfiguracoes();
         if (mensagemTexto.toLowerCase().includes('cardapio') || mensagemTexto.toLowerCase().includes('menu')) {
             if (config.link_cardapio) {
-                await enviarMensagemWhatsApp(numeroCliente, config.link_cardapio);
+                await enviarMensagemWhatsApp(numeroCliente, config.link_cardapio, 'SISTEMA', 'pediu_cardapio', 'CEIA');
                 broadcastLog('WHATSAPP', `Link do cardápio enviado para ${numeroNormalizado}.`);
             }
             return;
@@ -211,7 +161,7 @@ export async function iniciarWhatsApp() {
         if (config.auto_responder) {
             const respostaIA = await processarMensagemIA(mensagemTexto);
             broadcastLog('WHATSAPP', `Enviando resposta IA para ${numeroNormalizado}...`);
-            await enviarMensagemWhatsApp(numeroCliente, respostaIA);
+            await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', mensagemTexto, 'CEIA');
             broadcastLog('SUCCESS', `Mensagem enviada com sucesso para ${numeroNormalizado}`);
         }
     });
@@ -221,13 +171,13 @@ export async function iniciarWhatsApp() {
 //                      DISPARO ATIVO (MODO FANTASMA)
 // =============================================================================
 
-export async function enviarMensagemWhatsApp(numero: string, texto: string, retryCount = 0): Promise<string | null> {
+export async function enviarMensagemWhatsApp(numero: string, texto: string, telegramId: string, motoboyMessage: string, motoboyName: string, retryCount = 0): Promise<string | null> {
     try {
         // Se estiver conectando, segura a mensagem e tenta de novo a cada 2s (máx 10s)
         if (sessionStatus === 'CONNECTING' && retryCount < 5) {
             console.log(`[WHATSAPP] Aguardando inicialização do aparelho para disparar... (${retryCount + 1}/5)`);
             await new Promise(resolve => setTimeout(resolve, 2000));
-            return enviarMensagemWhatsApp(numero, texto, retryCount + 1);
+            return enviarMensagemWhatsApp(numero, texto, telegramId, motoboyMessage, motoboyName, retryCount + 1);
         }
 
         if (sessionStatus !== 'CONNECTED' || !sock) {
@@ -258,8 +208,22 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, retr
         await new Promise(resolve => setTimeout(resolve, 1500));
         await sock.sendPresenceUpdate('paused', idEnvio);
 
-        await sock.sendMessage(idEnvio, { text: texto });
-        return idEnvio;
+        const sentMsg: proto.IWebMessageInfo = await sock.sendMessage(idEnvio, { text: texto });
+        const realJid = sentMsg.key.remoteJid;
+
+        if (realJid && telegramId !== 'SISTEMA') {
+            contextCache.set(realJid, {
+                telegramId: telegramId,
+                motoboyName: motoboyName,
+                lastMotoboyMessage: motoboyMessage,
+                timestamp: Date.now()
+            });
+            setTimeout(() => {
+                contextCache.delete(realJid);
+            }, 15 * 60 * 1000); // 15 minutes TTL
+        }
+
+        return realJid;
     } catch (error) {
         console.error('Erro ao disparar WhatsApp nativo:', error);
         return null;
@@ -333,6 +297,31 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
         return completion.choices[0].message?.content || 'Estamos processando uma atualização sobre sua entrega. Um momento, por favor.';
     } catch (error) {
         return 'O sistema identificou uma breve lentidão na sua entrega. O parceiro já está ciente.';
+    }
+}
+
+async function analisarRespostaComContextoIA(respostaCliente: string, perguntaMotoboy: string, jid: string, telegramId: string): Promise<string | false> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const prompt = `Contexto: Motoboy perguntou "${perguntaMotoboy}". Cliente [${jid}] respondeu "${respostaCliente}". O Cliente está respondendo ao Motoboy? Se sim, retorne estritamente o ID: [${telegramId}]. Caso contrário, retorne 'false'.`;
+        
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                { role: 'system', content: "Você é um robô de análise de contexto. Responda apenas com o ID fornecido ou com a palavra 'false'." },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.0,
+        });
+
+        const resposta = completion.choices[0].message?.content || 'false';
+        return resposta.includes(telegramId) ? telegramId : false;
+    } catch (error) {
+        console.error("Erro na análise de contexto da IA:", error);
+        return false;
     }
 }
 
