@@ -221,10 +221,8 @@ export async function iniciarWhatsApp() {
                 } else {
                     await enviarMensagemWhatsApp(numeroCliente, "❌ Código não encontrado. Por favor, verifique e tente novamente.", 'SISTEMA', 'codigo_invalido', 'BOT');
                 }
-            } else {
-                await enviarMensagemWhatsApp(numeroCliente, "Por favor, digite apenas o código de 4 dígitos que você recebeu.", 'SISTEMA', 'formato_invalido', 'BOT');
+                return;
             }
-            return;
         }
 
         // Se chegou até aqui, o modo é 'BOT'
