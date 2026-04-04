@@ -230,32 +230,31 @@ export async function iniciarWhatsApp() {
         // Passo C: Se não caiu em nenhuma das opções acima, a mensagem vai para a IA de auto-atendimento.
         console.log('[DEBUG] Mensagem não atrelada a motoboy. Enviando para IA de Auto-Atendimento...');
         const config = await getConfiguracoes();
-        if (config.auto_responder) {
-            try {
-                console.log('[DEBUG] 🧠 Chamando motor da OpenAI (processarMensagemIA)...');
-                const respostaIA = await processarMensagemIA(mensagemTexto);
-                console.log(`[DEBUG] 🤖 Resposta gerada pela IA: "${respostaIA}"`);
+        console.log('[DEBUG] Valor do auto_responder no banco:', config.auto_responder);
+        try {
+            console.log('[DEBUG] 🧠 Chamando motor da OpenAI (processarMensagemIA)...');
+            const respostaIA = await processarMensagemIA(mensagemTexto);
+            console.log(`[DEBUG] 🤖 Resposta gerada pela IA: "${respostaIA}"`);
 
-                if (respostaIA.includes('[ACTION_TRACKING]')) {
-                    session.mode = 'WAITING_CODE';
-                    await enviarMensagemWhatsApp(numeroCliente, "Para localizar sua entrega, por favor, digite o código de 4 dígitos do seu pedido.", 'SISTEMA', 'pede_codigo', 'BOT');
-                    return;
-                }
-
-                if (respostaIA.includes('[ACTION_HUMAN]')) {
-                    session.mode = 'HUMAN';
-                    broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
-                    await enviarMensagemWhatsApp(numeroCliente, "Um de nossos atendentes já vai falar com você. Aguarde um instante.", 'SISTEMA', 'transfere_humano', 'BOT');
-                    return;
-                }
-                
-                console.log('[DEBUG] 📤 Disparando mensagem de volta para o WhatsApp...');
-                await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', 'SISTEMA_AUTO_ATENDIMENTO', 'BOT');
-                console.log('[DEBUG] ✅ Mensagem enviada com sucesso ao cliente!');
-
-            } catch (error) {
-                console.error('[ERRO FATAL] Falha na execução do Auto-Atendimento:', error);
+            if (respostaIA.includes('[ACTION_TRACKING]')) {
+                session.mode = 'WAITING_CODE';
+                await enviarMensagemWhatsApp(numeroCliente, "Para localizar sua entrega, por favor, digite o código de 4 dígitos do seu pedido.", 'SISTEMA', 'pede_codigo', 'BOT');
+                return;
             }
+
+            if (respostaIA.includes('[ACTION_HUMAN]')) {
+                session.mode = 'HUMAN';
+                broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidBruto, nome: msg.pushName || numeroNormalizado });
+                await enviarMensagemWhatsApp(numeroCliente, "Um de nossos atendentes já vai falar com você. Aguarde um instante.", 'SISTEMA', 'transfere_humano', 'BOT');
+                return;
+            }
+            
+            console.log('[DEBUG] 📤 Disparando mensagem de volta para o WhatsApp...');
+            await enviarMensagemWhatsApp(numeroCliente, respostaIA, 'SISTEMA', 'SISTEMA_AUTO_ATENDIMENTO', 'BOT');
+            console.log('[DEBUG] ✅ Mensagem enviada com sucesso ao cliente!');
+
+        } catch (error) {
+            console.error('[ERRO FATAL] Falha na execução do Auto-Atendimento:', error);
         }
     });
 }
