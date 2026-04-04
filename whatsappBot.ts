@@ -1,6 +1,7 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { Boom } from '@hapi/boom';
+import pino from 'pino';
 import OpenAI, { toFile } from 'openai';
 import fs from 'fs';
 
@@ -30,8 +31,10 @@ export async function iniciarWhatsApp() {
 
     sock = makeWASocket({
         auth: state,
-        browser: Browsers.macOS('Desktop'), // Simula o WhatsApp Web do Mac para evitar banimentos
-        syncFullHistory: false // Deixa mais rápido, não puxa mensagens antigas
+        version: [2, 3000, 1015901307], // Força a versão atualizada e funcional
+        logger: pino({ level: 'silent' }), // Silencia os logs vermelhos do Baileys
+        browser: Browsers.macOS('Desktop'),
+        syncFullHistory: false
     });
 
     sock.ev.on('creds.update', saveCreds);
