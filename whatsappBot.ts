@@ -133,17 +133,19 @@ export async function iniciarWhatsApp() {
         }
 
         // 2. Fallback Semântico via Cache de Contexto
-        if (contextCache.has(numeroCliente)) {
+        console.log(`[ROTEAMENTO] JID ${numeroCliente} não encontrado no DB. Buscando no Cache...`);
+        if (numeroCliente && contextCache.has(numeroCliente)) {
             const contexto = contextCache.get(numeroCliente)!;
-            const isRespostaRelevante = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage);
+            console.log(`[ROTEAMENTO] Contexto encontrado! Telegram ID: ${contexto.telegramId}. Validando com IA...`);
 
-            if (isRespostaRelevante) {
-                const resumoTecnico = await resumirRespostaClienteParaMotoboy(mensagemTexto);
-                console.log("[ROTEAMENTO] Enviando para Telegram ID: " + contexto.telegramId);
-                await sendTelegramMessage(contexto.telegramId, "⚠️ Retorno do Cliente: " + resumoTecnico);
-                broadcastLog('TELEGRAM', `Resposta do cliente [${numeroNormalizado}] roteada para ${contexto.telegramId} via Fallback Semântico.`);
+            const pertenceAoMotoboy = await analisarRespostaComContextoIA(mensagemTexto, contexto.lastMotoboyMessage);
+
+            if (pertenceAoMotoboy) {
+                const resumoLogistico = await resumirRespostaClienteParaMotoboy(mensagemTexto);
+                await sendTelegramMessage(contexto.telegramId, `⚠️ Retorno do Cliente: ${resumoLogistico}`);
+                console.log(`[ROTEAMENTO] Sucesso! Mensagem enviada para o Telegram ${contexto.telegramId}`);
                 contextCache.delete(numeroCliente);
-                return; // FINALIZA O PROCESSAMENTO AQUI
+                return;
             }
         }
 
@@ -209,6 +211,7 @@ export async function enviarMensagemWhatsApp(numero: string, texto: string, tele
 
         const sentMsg: proto.IWebMessageInfo = await sock.sendMessage(idEnvio, { text: texto });
         const realJid = sentMsg.key.remoteJid;
+        console.log(`[CACHE] Armazenando contexto para JID: ${realJid}`);
 
         if (realJid && telegramId !== 'SISTEMA') {
             contextCache.set(realJid, {
@@ -304,7 +307,7 @@ async function analisarRespostaComContextoIA(respostaCliente: string, perguntaMo
         if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
 
         const openai = new OpenAI({ apiKey: config.openai_key });
-        const prompt = `Responda apenas SIM ou NAO. O Cliente '${respostaCliente}' está respondendo ao Motoboy que perguntou '${perguntaMotoboy}'?`;
+        const prompt = `Responda apenas SIM ou NAO. O cliente disse '${respostaCliente}' em resposta a '${perguntaMotoboy}'?`;
         
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
@@ -353,8 +356,8 @@ async function resumirRespostaClienteParaMotoboy(respostaCliente: string): Promi
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
-                { role: 'system', content: "Você é um operador de rádio logístico. Resuma a mensagem do cliente em uma instrução curta (máximo 6 palavras) para o motoboy. NUNCA fale com o cliente. NUNCA diga 'informe ao cliente'. Exemplo de saída: 'Cliente ciente, pode prosseguir'." },
-                { role: 'user', content: `O cliente enviou: '${respostaCliente}'` }
+                { role: 'system', content: "Você é um operador de rádio. Resuma para o motoboy em 5 palavras. Ex: 'Cliente ciente' ou 'Confirmou endereço'. NUNCA fale com o cliente." },
+                { role: 'user', content: `O cliente disse: '${respostaCliente}'` }
             ],
             temperature: 0.2,
         });
