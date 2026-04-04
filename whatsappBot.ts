@@ -5,7 +5,7 @@ import pino from 'pino';
 import OpenAI, { toFile } from 'openai';
 import fs from 'fs';
 
-import { getConfiguracoes, getMotoboysOnline, getPedidos, getPacotes } from './database';
+import { getConfiguracoes, getMotoboysOnline, getPedidos, getPacotes, getFleet } from './database';
 import { getRotaPeloCliente } from './operacao';
 import { broadcastLog } from './logger';
 
@@ -202,26 +202,11 @@ export async function iniciarWhatsApp() {
 
         if (session.mode === 'WAITING_CODE') {
             if (mensagemTexto.match(/^\d{4}$/)) {
-                const pedidosRaw = await getPedidos();
-                const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
-                const pacotesRaw = await getPacotes();
-                const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
-                
-                const pedidoEncontrado = pedidos.find((p: any) => p.codigo_entrega === mensagemTexto);
-                if (pedidoEncontrado) {
-                    const pacoteDoPedido = pacotes.find((pac: any) => pac.pedidosIds.includes(pedidoEncontrado.id));
-                    let status = "Seu pedido está em preparação na loja.";
-                    if (pacoteDoPedido) {
-                        if (pacoteDoPedido.status === 'EM_ROTA') {
-                            status = `Seu pedido já saiu para entrega com o motoboy ${pacoteDoPedido.motoboy?.nome || 'designado'}.`;
-                        } else if (pacoteDoPedido.status === 'PENDENTE_ACEITE') {
-                            status = `Estamos aguardando a confirmação do motoboy ${pacoteDoPedido.motoboy?.nome || 'designado'} para iniciar a sua entrega.`;
-                        }
-                    }
-                    await enviarMensagemWhatsApp(numeroCliente, `✅ Localizei! ${status}`, 'SISTEMA', 'status_pedido', 'BOT');
+                const config = await getConfiguracoes();
+                const status = await gerarRastreioHumanizado(mensagemTexto, config);
+                await enviarMensagemWhatsApp(numeroCliente, status, 'SISTEMA', 'status_pedido', 'BOT');
+                if (!status.startsWith("❌")) {
                     session.mode = 'BOT';
-                } else {
-                    await enviarMensagemWhatsApp(numeroCliente, "❌ Código não encontrado. Por favor, verifique e tente novamente.", 'SISTEMA', 'codigo_invalido', 'BOT');
                 }
                 return;
             }
@@ -337,6 +322,70 @@ function calcularDistancia(lat1: number, lon1: number, lat2: number, lon2: numbe
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return parseFloat((R * c).toFixed(2));
+}
+
+async function gerarRastreioHumanizado(codigo: string, config: any): Promise<string> {
+    try {
+        const pedidosRaw = await getPedidos();
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pedidoEncontrado = pedidos.find((p: any) => p.codigo_entrega === codigo);
+
+        if (!pedidoEncontrado) return "❌ Código não encontrado. Verifique os 4 dígitos e tente novamente.";
+
+        const pacotesRaw = await getPacotes();
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacoteDoPedido = pacotes.find((pac: any) => pac.pedidosIds.includes(pedidoEncontrado.id));
+
+        if (!pacoteDoPedido) return "Seu pedido está sendo preparado na cozinha!";
+        if (pacoteDoPedido.status === 'PENDENTE_ACEITE') return "Estamos aguardando o entregador iniciar a rota.";
+
+        const telegramId = pacoteDoPedido.motoboy?.telegram_id;
+        
+        // EXTRAÇÃO DO PRIMEIRO NOME:
+        const nomeCompleto = pacoteDoPedido.motoboy?.nome || 'o entregador';
+        const primeiroNome = nomeCompleto !== 'o entregador' ? nomeCompleto.split(' ')[0] : nomeCompleto;
+
+        const frota = await getFleet();
+        const motoboyDb = frota.find((m: any) => m.telegram_id === telegramId);
+
+        let localizacaoAtual = "a caminho";
+
+        // EXTRAÇÃO DA RUA EXATA VIA GOOGLE MAPS:
+        if (motoboyDb && motoboyDb.lat && motoboyDb.lng && config.google_maps_key) {
+            try {
+                const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${motoboyDb.lat},${motoboyDb.lng}&key=${config.google_maps_key}`);
+                const geoData = await geoRes.json();
+                if (geoData.results && geoData.results.length > 0) {
+                    const rua = geoData.results[0].address_components.find((c: any) => c.types.includes('route'))?.long_name;
+                    const bairro = geoData.results[0].address_components.find((c: any) => c.types.includes('sublocality'))?.long_name;
+                    
+                    if (rua && bairro) {
+                        localizacaoAtual = `na ${rua}, bairro ${bairro}`;
+                    } else if (rua) {
+                        localizacaoAtual = `na ${rua}`;
+                    } else {
+                        localizacaoAtual = `em ${geoData.results[0].formatted_address.split(',')[0]}`;
+                    }
+                }
+            } catch (e) {
+                console.error("[DEBUG MAPS] Erro ao buscar rua:", e);
+            }
+        }
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: `Você é o atendente do restaurante. O entregador chama-se ${primeiroNome} e no momento ele está ${localizacaoAtual} com o pedido do cliente. Crie uma mensagem curta (máximo 15 palavras), humanizada e calorosa avisando que a comida está chegando. Diga o nome do entregador e o local exato onde ele está. NÃO ofereça ajuda extra.` }
+            ],
+            temperature: 0.5,
+        });
+        
+        return completion.choices[0].message?.content || `O entregador ${primeiroNome} está ${localizacaoAtual} com o seu pedido!`;
+    } catch (e) {
+        console.error("[DEBUG RASTREIO] Erro geral:", e);
+        return "Seu pedido já saiu para entrega e está a caminho!";
+    }
 }
 
 async function obterStatusLogistico(): Promise<string> {
