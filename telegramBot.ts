@@ -352,7 +352,7 @@ export async function iniciarTelegram() {
                             }
                         
                             console.log(`[DEBUG CHAT] 🟢 IA aprovou. Disparando para o WhatsApp...`);
-                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional, ctx.chat.id.toString(), text);
+                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional, ctx.chat.id.toString(), text, ctx.from.first_name);
                             
                             if (jidCliente) {
                                 await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
