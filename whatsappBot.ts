@@ -139,8 +139,8 @@ export async function iniciarWhatsApp() {
 
             if (isRespostaRelevante) {
                 const resumoTecnico = await resumirRespostaClienteParaMotoboy(mensagemTexto);
-                const prefixo = isAudio ? '🎙️ Cliente (áudio):\n' : '💬 Cliente:\n';
-                await sendTelegramMessage(contexto.telegramId, `${prefixo}"${resumoTecnico}"`);
+                console.log("[ROTEAMENTO] Enviando para Telegram ID: " + contexto.telegramId);
+                await sendTelegramMessage(contexto.telegramId, "⚠️ Retorno do Cliente: " + resumoTecnico);
                 broadcastLog('TELEGRAM', `Resposta do cliente [${numeroNormalizado}] roteada para ${contexto.telegramId} via Fallback Semântico.`);
                 contextCache.delete(numeroCliente);
                 return; // FINALIZA O PROCESSAMENTO AQUI
@@ -304,7 +304,7 @@ async function analisarRespostaComContextoIA(respostaCliente: string, perguntaMo
         if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
 
         const openai = new OpenAI({ apiKey: config.openai_key });
-        const prompt = `O Motoboy perguntou: '${perguntaMotoboy}'. O Cliente respondeu: '${respostaCliente}'. O Cliente está respondendo ao que foi perguntado ou confirmando o aviso? Responda apenas 'SIM' ou 'NAO'.`;
+        const prompt = `Responda apenas SIM ou NAO. O Cliente '${respostaCliente}' está respondendo ao Motoboy que perguntou '${perguntaMotoboy}'?`;
         
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
@@ -353,8 +353,8 @@ async function resumirRespostaClienteParaMotoboy(respostaCliente: string): Promi
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
-                { role: 'system', content: "O cliente respondeu. Traduza isso em uma instrução técnica curta (máximo 7 palavras) para o motoboy. Exemplo: 'Cliente ciente, pode prosseguir' ou 'Cliente confirmou endereço'. NUNCA use saudações, NUNCA use 'Espero que esteja bem', seja puramente logístico." },
-                { role: 'user', content: `O cliente respondeu: '${respostaCliente}'` }
+                { role: 'system', content: "Você é um operador de rádio logístico. Resuma a mensagem do cliente em uma instrução curta (máximo 6 palavras) para o motoboy. NUNCA fale com o cliente. NUNCA diga 'informe ao cliente'. Exemplo de saída: 'Cliente ciente, pode prosseguir'." },
+                { role: 'user', content: `O cliente enviou: '${respostaCliente}'` }
             ],
             temperature: 0.2,
         });
