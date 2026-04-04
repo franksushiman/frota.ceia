@@ -180,6 +180,20 @@ export async function iniciarTelegram() {
                 pacote.status = 'EM_ROTA';
                 await savePacote(pacote);
 
+                // Disparo para os clientes apenas APÓS o motoboy aceitar
+                for (const pId of pacote.pedidosIds || []) {
+                    const p = pedidos.find((ped: any) => ped.id === pId);
+                    const telefoneCliente = p?.telefone || p?.telefoneCliente || p?.whatsapp || p?.telefone_cliente;
+                    if (p && telefoneCliente) {
+                        const num = telefoneCliente.replace(/\D/g, '');
+                        if (num.length >= 10) {
+                            const msgCliente = `Olá, ${p.nomeCliente.split(' ')[0]}! O seu pedido acabou de sair para entrega com o parceiro *${pacote.motoboy.nome}*. 🛵💨\n\n⚠️ *Atenção:* Para a segurança da sua entrega, informe o código *${p.codigo_entrega}* ao motoboy quando ele chegar.`;
+                            // enviarMensagemWhatsApp já está importado no topo do arquivo
+                            await enviarMensagemWhatsApp('55' + num, msgCliente);
+                        }
+                    }
+                }
+
                 let detalheMsg = '📝 *DETALHES DA ROTA:*\n\n';
                 let index = 0;
                 for (const pId of pacote.pedidosIds || []) {
