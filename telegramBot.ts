@@ -2,7 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId, getPacotes, getPedidos, savePacote } from './database';
 import { broadcastLog } from './logger';
 import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
-import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente } from './whatsappBot';
+import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente, vincularContextoChat } from './whatsappBot';
 
 type Step = 'NOME' | 'CPF' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
 
@@ -352,8 +352,14 @@ export async function iniciarTelegram() {
                             }
                         
                             console.log(`[DEBUG CHAT] 🟢 IA aprovou. Disparando para o WhatsApp...`);
-                            await enviarMensagemWhatsApp('55' + num, textoProfissional);
-                            await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
+                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional);
+                            
+                            if (jidCliente) {
+                                vincularContextoChat(jidCliente, ctx.chat.id.toString(), ctx.from.first_name, text);
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
+                            } else {
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "❌ Falha ao enviar. Verifique a conexão do WhatsApp.");
+                            }
                         } catch (e) {
                             console.error("[DEBUG WHATSAPP] Erro CRÍTICO na API ou IA:", e);
                             await ctx.reply("❌ Falha ao enviar a mensagem. Verifique a conexão.");
