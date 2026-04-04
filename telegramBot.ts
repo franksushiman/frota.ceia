@@ -2,7 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId, getPacotes, getPedidos, savePacote } from './database';
 import { broadcastLog } from './logger';
 import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
-import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente, vincularContextoChat } from './whatsappBot';
+import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente } from './whatsappBot';
 
 type Step = 'NOME' | 'CPF' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
 
@@ -352,10 +352,9 @@ export async function iniciarTelegram() {
                             }
                         
                             console.log(`[DEBUG CHAT] 🟢 IA aprovou. Disparando para o WhatsApp...`);
-                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional);
+                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional, ctx.chat.id.toString(), text, ctx.from.first_name);
                             
                             if (jidCliente) {
-                                vincularContextoChat(jidCliente, ctx.chat.id.toString(), ctx.from.first_name, text);
                                 await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "✅ Mensagem enviada ao cliente!");
                             } else {
                                 await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "❌ Falha ao enviar. Verifique a conexão do WhatsApp.");
