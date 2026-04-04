@@ -132,8 +132,25 @@ export async function iniciarWhatsApp() {
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroNormalizado}]: ${mensagemTexto}`);
 
+        // Busca Inteligente da Rota (Contorna problemas de DDI 55 e 9º dígito)
+        let rota = await getRotaPeloCliente(numeroNormalizado);
+
+        if (!rota && numeroNormalizado.startsWith('55')) {
+            const numSem55 = numeroNormalizado.substring(2);
+            rota = await getRotaPeloCliente(numSem55); // Tenta bater com 31999999999
+
+            if (!rota && numSem55.length === 11) {
+                // Tenta bater removendo o 9º dígito (ex: 3199999999)
+                const numSem9 = numSem55.substring(0, 2) + numSem55.substring(3);
+                rota = await getRotaPeloCliente(numSem9);
+            } else if (!rota && numSem55.length === 10) {
+                // Tenta bater forçando o 9º dígito (ex: 31999999999)
+                const numCom9 = numSem55.substring(0, 2) + '9' + numSem55.substring(2);
+                rota = await getRotaPeloCliente(numCom9);
+            }
+        }
+
         // Redirecionamento da mensagem (Para o Motoboy ou para a IA)
-        const rota = await getRotaPeloCliente(numeroNormalizado);
         if (rota && rota.telegram_id) {
             const resumo = await resumirClienteParaMotoboy(mensagemTexto);
             if (isAudio) {
@@ -168,10 +185,17 @@ export async function iniciarWhatsApp() {
 //                      DISPARO ATIVO (MODO FANTASMA)
 // =============================================================================
 
-export async function enviarMensagemWhatsApp(numero: string, texto: string): Promise<boolean> {
+export async function enviarMensagemWhatsApp(numero: string, texto: string, retryCount = 0): Promise<boolean> {
     try {
+        // Se estiver conectando, segura a mensagem e tenta de novo a cada 2s (máx 10s)
+        if (sessionStatus === 'CONNECTING' && retryCount < 5) {
+            console.log(`[WHATSAPP] Aguardando inicialização do aparelho para disparar... (${retryCount + 1}/5)`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return enviarMensagemWhatsApp(numero, texto, retryCount + 1);
+        }
+
         if (sessionStatus !== 'CONNECTED' || !sock) {
-            console.error('[WHATSAPP] Tentativa de envio falhou: Sessão não está conectada.');
+            console.error('[WHATSAPP] Tentativa de envio falhou: Sessão desconectada.');
             return false;
         }
 
