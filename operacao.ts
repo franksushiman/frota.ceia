@@ -37,14 +37,14 @@ export async function getRotaPeloCliente(telefoneCliente: string) {
     const numeroLimpo = telefoneCliente.replace(/\D/g, '');
     
     // Pega só os últimos 8 dígitos (o núcleo real da linha do cliente)
-    const nucleo = numeroLimpo.slice(-8);
+    const nucleoBuscado = numeroLimpo.slice(-8);
 
     const rotas = await getRotasAtivas();
     return rotas.find((r: any) => {
-        const telBanco = (r.pedido?.telefone || r.pedido?.telefone_cliente || r.pedido?.whatsapp || '').replace(/\D/g, '');
+        const telPedido = (r.pedido?.telefone || r.pedido?.telefone_cliente || r.pedido?.whatsapp || '').replace(/\D/g, '');
+        const nucleoPedido = telPedido.slice(-8);
         
-        // Se o telefone do banco tiver pelo menos 8 dígitos e contiver o núcleo, é o mesmo cliente
-        return telBanco.length >= 8 && telBanco.includes(nucleo);
+        return nucleoPedido === nucleoBuscado;
     });
 }
 
