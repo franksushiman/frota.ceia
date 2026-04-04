@@ -30,7 +30,6 @@ export async function iniciarWhatsApp() {
 
     sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true, // Continua mostrando no console por segurança
         browser: Browsers.macOS('Desktop'), // Simula o WhatsApp Web do Mac para evitar banimentos
         syncFullHistory: false // Deixa mais rápido, não puxa mensagens antigas
     });
