@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, registrarLog, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas } from './database';
-import { conectarEvolutionAPI, qrCodeBase64, sessionStatus, handleWhatsAppWebhook, enviarMensagemWhatsApp } from './whatsappBot';
+import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsappBot';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
@@ -191,19 +191,12 @@ export async function startServer() {
     });
 
     app.get('/api/whatsapp/start', async (request, reply) => {
-        await conectarEvolutionAPI();
+        await iniciarWhatsApp();
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.get('/api/whatsapp/status', async (request, reply) => {
-        return reply.code(200).type('application/json; charset=utf-8').send({ qr: qrCodeBase64, status: sessionStatus });
-    });
-
-    app.post('/api/whatsapp/webhook', async (request: any, reply) => {
-        console.log('📥 [EVOLUTION] Webhook recebido em /api/whatsapp/webhook');
-        const parsedBody = parseWebhookBody(request.body);
-        await handleWhatsAppWebhook(parsedBody);
-        return reply.code(200).type('application/json; charset=utf-8').send({ recebido: true });
+        return reply.code(200).type('application/json; charset=utf-8').send({ status: sessionStatus, qr: qrCodeBase64 });
     });
 
     app.post('/api/whatsapp/send', async (request: any, reply) => {
