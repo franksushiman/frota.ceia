@@ -329,7 +329,7 @@ async function analisarRespostaComContextoIA(respostaCliente: string, contextos:
 
         const openai = new OpenAI({ apiKey: config.openai_key });
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4-turbo-preview',
+            model: 'gpt-4o-mini',
             messages: [
                 { role: 'system', content: "Você é um roteador lógico. Analise a resposta do cliente e os contextos pendentes. Sua resposta deve ser apenas o 'telegramId' do motoboy correspondente ou a palavra 'NAO'." },
                 { role: 'user', content: prompt }
