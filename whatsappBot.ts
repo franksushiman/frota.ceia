@@ -132,23 +132,7 @@ export async function iniciarWhatsApp() {
 
         broadcastLog('WHATSAPP', `Recebido de [${numeroNormalizado}]: ${mensagemTexto}`);
 
-        // Busca Inteligente da Rota (Contorna problemas de DDI 55 e 9º dígito)
-        let rota = await getRotaPeloCliente(numeroNormalizado);
-
-        if (!rota && numeroNormalizado.startsWith('55')) {
-            const numSem55 = numeroNormalizado.substring(2);
-            rota = await getRotaPeloCliente(numSem55); // Tenta bater com 31999999999
-
-            if (!rota && numSem55.length === 11) {
-                // Tenta bater removendo o 9º dígito (ex: 3199999999)
-                const numSem9 = numSem55.substring(0, 2) + numSem55.substring(3);
-                rota = await getRotaPeloCliente(numSem9);
-            } else if (!rota && numSem55.length === 10) {
-                // Tenta bater forçando o 9º dígito (ex: 31999999999)
-                const numCom9 = numSem55.substring(0, 2) + '9' + numSem55.substring(2);
-                rota = await getRotaPeloCliente(numCom9);
-            }
-        }
+        const rota = await getRotaPeloCliente(numeroNormalizado);
 
         // Redirecionamento da mensagem (Para o Motoboy ou para a IA)
         if (rota && rota.telegram_id) {
