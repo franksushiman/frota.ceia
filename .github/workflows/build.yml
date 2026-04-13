@@ -21,6 +21,8 @@ jobs:
           cache: npm
       - name: Instalar dependências
         run: npm install
+      - name: Instalar Ofuscador
+        run: npm install -g javascript-obfuscator
       - name: Build
         run: node build.mjs
         env:
