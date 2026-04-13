@@ -22,7 +22,7 @@ jobs:
       - name: Instalar dependências
         run: npm install
       - name: Instalar Ofuscador
-        run: npm install -g javascript-obfuscator
+        run: npm install javascript-obfuscator
       - name: Build
         run: node build.mjs
         env:
