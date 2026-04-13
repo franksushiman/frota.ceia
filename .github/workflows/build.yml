@@ -1,10 +1,8 @@
 name: CEIA Frota — Build Multi-Plataforma
-
 on:
   push:
     tags:
       - 'v*'
-
 jobs:
   build:
     name: Build ${{ matrix.os }}
@@ -13,42 +11,30 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Node.js 20
+      - name: Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
       - name: Instalar dependências
-        run: npm ci
-
-      - name: Rebuild módulos nativos para Electron
-        run: npx electron-rebuild -f -w sqlite3
-        env:
-          npm_config_build_from_source: true
-
-      - name: Build + Ofuscação
+        run: npm install
+      - name: Build
         run: node build.mjs
         env:
           CI: true
-
       - name: Publicar — Linux
         if: matrix.os == 'ubuntu-latest'
         run: npm run electron:build -- --linux --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publicar — Windows
         if: matrix.os == 'windows-latest'
         run: npm run electron:build -- --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publicar — Mac
         if: matrix.os == 'macos-latest'
         run: npm run electron:build -- --mac --publish always
