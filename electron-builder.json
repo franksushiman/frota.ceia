@@ -22,36 +22,69 @@
     "!release/**"
   ],
   "extraResources": [
-    { "from": "database.sqlite", "to": "database.sqlite" },
-    { "from": "auth_info_baileys", "to": "auth_info_baileys", "filter": ["**/*"] }
+    {
+      "from": "database.sqlite",
+      "to": "database.sqlite"
+    },
+    {
+      "from": "auth_info_baileys",
+      "to": "auth_info_baileys",
+      "filter": [
+        "**/*"
+      ]
+    }
   ],
   "asar": false,
   "linux": {
     "target": [
-      { "target": "AppImage", "arch": ["x64"] },
-      { "target": "deb", "arch": ["x64"] }
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "deb",
+        "arch": [
+          "x64"
+        ]
+      }
     ],
-    "icon": "electron/icons/icons/png",
+    "icon": "electron/icons/png",
     "category": "public.app-category.business",
     "maintainer": "CEIA <contato@ceia.ia.br>",
     "vendor": "CEIA"
   },
   "win": {
-    "target": [{ "target": "nsis", "arch": ["x64"] }],
-    "icon": "electron/icons/icons/win/icon.ico"
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "electron/icons/win/icon.ico",
+    "installerIcon": "electron/icons/win/icon.ico"
   },
   "mac": {
     "target": [
-      { "target": "dmg", "arch": ["x64", "arm64"] }
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
     ],
-    "icon": "electron/icons/icons/mac/icon.icns",
+    "icon": "electron/icons/mac/icon.icns",
     "category": "public.app-category.business",
     "hardenedRuntime": true,
     "gatekeeperAssess": false
   },
   "nsis": {
-    "installerIcon": "electron/icons/icons/win/icon.ico",
-    "uninstallerIcon": "electron/icons/icons/win/icon.ico"
+    "installerIcon": "electron/icons/win/icon.ico",
+    "uninstallerIcon": "electron/icons/win/icon.ico"
   },
   "publish": {
     "provider": "github",
