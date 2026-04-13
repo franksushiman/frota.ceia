@@ -3,8 +3,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
-const _dirname = __dirname;
-const outfile   = join(_dirname, 'dist', 'server.cjs');
+const __filename = fileURLToPath(import.meta.url);
+const _dirname = dirname(__filename);
+const outfile = join(_dirname, 'dist', 'server.cjs');
 
 if (!existsSync(join(_dirname, 'dist'))) {
     mkdirSync(join(_dirname, 'dist'), { recursive: true });
