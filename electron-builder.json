@@ -1,82 +1,23 @@
 {
-  "appId": "br.ia.ceia.frota",
+  "appId": "br.ceia.frota",
   "productName": "CEIA Frota",
-  "copyright": "Copyright © 2026 CEIA",
   "directories": {
-    "output": "release",
-    "buildResources": "electron"
+    "output": "release"
   },
-  "files": [
-    "dist/server.cjs",
-    "index.html",
-    "electron/main.cjs",
-    "electron/preload.cjs",
-    "package.json",
-    "node_modules/**/*",
-    "!node_modules/.bin/**",
-    "!node_modules/**/test/**",
-    "!node_modules/**/tests/**",
-    "!node_modules/**/*.md",
-    "!**/.aider*",
-    "!**/*.map",
-    "!release/**"
-  ],
-  "extraResources": [
-    {
-      "from": "database.sqlite",
-      "to": "database.sqlite"
-    },
-    {
-      "from": "auth_info_baileys",
-      "to": "auth_info_baileys",
-      "filter": [
-        "**/*"
-      ]
-    }
-  ],
-  "asar": false,
+  "files": ["dist/**/*", "electron/**/*", "node_modules/**/*", "package.json"],
   "linux": {
-    "target": [
-      {
-        "target": "AppImage",
-        "arch": [
-          "x64"
-        ]
-      },
-      {
-        "target": "deb",
-        "arch": [
-          "x64"
-        ]
-      }
-    ],
-    "icon": "electron/icons/png",
+    "target": [{ "target": "deb", "arch": ["x64"] }],
+    "icon": "electron/icons/png/icon.png",
     "category": "public.app-category.business",
     "maintainer": "CEIA <contato@ceia.ia.br>",
     "vendor": "CEIA"
   },
   "win": {
-    "target": [
-      {
-        "target": "nsis",
-        "arch": [
-          "x64"
-        ]
-      }
-    ],
-    "icon": "electron/icons/win/icon.ico",
-    "installerIcon": "electron/icons/win/icon.ico"
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "icon": "electron/icons/win/icon.ico"
   },
   "mac": {
-    "target": [
-      {
-        "target": "dmg",
-        "arch": [
-          "x64",
-          "arm64"
-        ]
-      }
-    ],
+    "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
     "icon": "electron/icons/mac/icon.icns",
     "category": "public.app-category.business",
     "hardenedRuntime": true,
