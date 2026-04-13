@@ -1,0 +1,61 @@
+{
+  "appId": "br.ia.ceia.frota",
+  "productName": "CEIA Frota",
+  "copyright": "Copyright © 2026 CEIA",
+  "directories": {
+    "output": "release",
+    "buildResources": "electron"
+  },
+  "files": [
+    "dist/server.cjs",
+    "index.html",
+    "electron/main.cjs",
+    "electron/preload.cjs",
+    "package.json",
+    "node_modules/**/*",
+    "!node_modules/.bin/**",
+    "!node_modules/**/test/**",
+    "!node_modules/**/tests/**",
+    "!node_modules/**/*.md",
+    "!**/.aider*",
+    "!**/*.map",
+    "!release/**"
+  ],
+  "extraResources": [
+    { "from": "database.sqlite", "to": "database.sqlite" },
+    { "from": "auth_info_baileys", "to": "auth_info_baileys", "filter": ["**/*"] }
+  ],
+  "asar": false,
+  "linux": {
+    "target": [
+      { "target": "AppImage", "arch": ["x64"] },
+      { "target": "deb", "arch": ["x64"] }
+    ],
+    "icon": "electron/icons/icons/png",
+    "category": "public.app-category.business",
+    "maintainer": "CEIA <contato@ceia.ia.br>",
+    "vendor": "CEIA"
+  },
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "icon": "electron/icons/icons/win/icon.ico"
+  },
+  "mac": {
+    "target": [
+      { "target": "dmg", "arch": ["x64", "arm64"] }
+    ],
+    "icon": "electron/icons/icons/mac/icon.icns",
+    "category": "public.app-category.business",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false
+  },
+  "nsis": {
+    "installerIcon": "electron/icons/icons/win/icon.ico",
+    "uninstallerIcon": "electron/icons/icons/win/icon.ico"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "franksushiman",
+    "repo": "frota.ceia"
+  }
+}
