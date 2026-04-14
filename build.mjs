@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const _dirname = dirname(__filename);
@@ -25,6 +25,10 @@ await build({
     minify:      false,
     logLevel:    'info',
 });
+
+// Copia o frontend estático para dist/ — o server.ts o serve de __dirname/index.html
+copyFileSync(join(_dirname, 'index.html'), join(_dirname, 'dist', 'index.html'));
+console.log('📄 index.html copiado para dist/');
 
 const shouldObfuscate = process.env.CI === 'true' || process.argv.includes('--obfuscate');
 if (shouldObfuscate) {
