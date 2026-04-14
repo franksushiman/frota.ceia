@@ -67,7 +67,8 @@
   "publish": {
     "provider": "github",
     "owner": "franksushiman",
-    "repo": "frota.ceia"
+    "repo": "frota.ceia",
+    "releaseType": "release"
   },
   "npmRebuild": false,
   "asarUnpack": ["dist/**/*"]
