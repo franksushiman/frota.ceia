@@ -57,19 +57,22 @@ function startServer() {
 
     const { dbPath, authPath, envPath } = getUserDataPaths();
     const appRoot = isDev ? path.join(__dirname, '..') : app.getAppPath();
+    // spawn() é uma syscall nativa e não consegue acessar caminhos dentro do .asar.
+    // Em produção, usamos app.asar.unpacked onde os arquivos existem no filesystem real.
+    const spawnRoot = isDev ? appRoot : appRoot.replace('app.asar', 'app.asar.unpacked');
     const env = { ...process.env, DB_PATH: dbPath, AUTH_PATH: authPath, PORT: String(PORT) };
-    
+
     let cmd, args;
     if (isDev) {
         cmd = path.join(appRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
         args = ['--env-file=' + path.join(appRoot, '.env'), path.join(appRoot, 'index.ts')];
     } else {
         cmd = process.env.CEIA_NODE_BIN || 'node';
-        args = [path.join(appRoot, 'dist', 'server.cjs')];
+        args = [path.join(spawnRoot, 'dist', 'server.cjs')];
         if (fs.existsSync(envPath)) args.unshift('--env-file=' + envPath);
     }
 
-    serverProcess = spawn(cmd, args, { cwd: appRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    serverProcess = spawn(cmd, args, { cwd: spawnRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
     serverProcess.stdout.on('data', d => process.stdout.write('[CEIA] ' + d));
     serverProcess.stderr.on('data', d => process.stderr.write('[CEIA] ' + d));
     

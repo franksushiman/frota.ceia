@@ -69,5 +69,6 @@
     "owner": "franksushiman",
     "repo": "frota.ceia"
   },
-  "npmRebuild": false
+  "npmRebuild": false,
+  "asarUnpack": ["dist/**/*"]
 }
