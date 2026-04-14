@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
 
-const dbPath = path.join(__dirname, 'database.sqlite');
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'database.sqlite');
 
 export let db: Database | null = null;
 let dbPromise: Promise<Database> | null = null;
