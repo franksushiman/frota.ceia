@@ -5,9 +5,20 @@
     "output": "release"
   },
   "files": [
-    "dist/**/*",
-    "electron/**/*",
-    "node_modules/**/*",
+    {
+      "from": "dist",
+      "to": "dist",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "electron",
+      "to": "electron",
+      "filter": [
+        "**/*"
+      ]
+    },
     "package.json"
   ],
   "linux": {
@@ -57,5 +68,6 @@
     "provider": "github",
     "owner": "franksushiman",
     "repo": "frota.ceia"
-  }
+  },
+  "npmRebuild": false
 }
