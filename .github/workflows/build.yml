@@ -30,6 +30,10 @@ jobs:
       - name: Instalar dependências
         run: npm install
 
+      - name: Sincronizar versão com a tag
+        shell: bash
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+
       - name: Build
         run: node build.mjs
         env:
