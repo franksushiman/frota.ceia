@@ -72,7 +72,8 @@ export async function iniciarWhatsApp() {
     qrCodeBase64 = null;
     broadcastLog('WHATSAPP', 'Iniciando conexão nativa com Baileys...');
 
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const authPath = process.env.AUTH_PATH || 'auth_info_baileys';
+    const { state, saveCreds } = await useMultiFileAuthState(authPath);
 
     const { version } = await fetchLatestBaileysVersion();
     sock = makeWASocket({
@@ -108,7 +109,7 @@ export async function iniciarWhatsApp() {
                 sessionStatus = 'DISCONNECTED';
                 qrCodeBase64 = null;
                 // Apaga a pasta da sessão antiga se o usuário desconectar pelo celular
-                fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                fs.rmSync(process.env.AUTH_PATH || 'auth_info_baileys', { recursive: true, force: true });
                 broadcastLog('WHATSAPP', 'Sessão encerrada/deslogada. Será necessário ler o QR Code novamente.');
             }
         } else if (connection === 'open') {
