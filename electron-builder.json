@@ -71,5 +71,5 @@
     "releaseType": "release"
   },
   "npmRebuild": false,
-  "asarUnpack": ["dist/**/*"]
+  "asarUnpack": ["dist/**/*", "node_modules/**/*"]
 }
