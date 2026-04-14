@@ -3,15 +3,11 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, registrarLog, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas } from './database';
 import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsappBot';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export const app: FastifyInstance = Fastify({ logger: false });
 
