@@ -20,21 +20,10 @@ await build({
     target:      'node20',
     format:      'cjs',
     outfile,
+    packages:    'external',
     sourcemap:   false,
     minify:      false,
     logLevel:    'info',
-    plugins: [{
-        name: 'external-node-modules',
-        setup(build) {
-            // Marca como external todo specifier que não começa com '.' ou '/'
-            // Cobre pacotes npm, escopos (@org/pkg), módulos node: e qualquer
-            // dependência não listada explicitamente no package.json
-            build.onResolve({ filter: /^[^./]/ }, args => ({
-                path:     args.path,
-                external: true,
-            }));
-        },
-    }],
 });
 
 const shouldObfuscate = process.env.CI === 'true' || process.argv.includes('--obfuscate');
