@@ -1,33 +1,138 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import QRCode from 'qrcode';
 
-import { initDatabase, getConfiguracoes, updateConfiguracoes, registrarLog, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas } from './database';
-import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsappBot';
-import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem } from './telegramBot';
+// \u2500\u2500 Tokens de despacho presencial \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// token UUID \u2192 {pacoteId, motoboy, expiresAt}. Sem persist\u00eancia \u2014 reinicia com o servidor.
+const dispatchTokens = new Map<string, { pacoteId: string; motoboy: any; expiresAt: number }>();
+setInterval(() => {
+    const now = Date.now();
+    for (const [t, d] of dispatchTokens) if (d.expiresAt < now) dispatchTokens.delete(t);
+}, 5 * 60 * 1000);
+
+import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
+import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsapp/index';
+import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const HUB_URL = process.env.HUB_URL;
+const LOJA_URL = process.env.LOJA_URL ?? '';
+
 export const app: FastifyInstance = Fastify({ logger: false });
-
-function parseWebhookBody(body: any): any {
-    if (typeof body !== 'string') return body;
-
-    try {
-        return JSON.parse(body);
-    } catch {
-        return body;
-    }
-}
 
 export async function startServer() {
     await initDatabase();
 
-    await app.register(cors, { origin: '*' });
+    await app.register(cors, { origin: '*', credentials: true });
+    await app.register(cookie);
     await app.register(websocket);
 
     initLogger(app);
+
+    // \u2500\u2500 JWT middleware: protege todas as rotas /api/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    app.addHook('onRequest', async (request: any, reply) => {
+        const url = request.url.split('?')[0];
+        const publicEndpoints = ['/api/profile/public', '/api/frota-compartilhada/disponiveis', '/api/frota-compartilhada/repassar-convite'];
+        if (!url.startsWith('/api/') || publicEndpoints.includes(url)) return;
+        const token: string | undefined = request.cookies?.ceia_token;
+        if (!token) {
+            return reply.code(401).header('Content-Type', 'application/json; charset=utf-8').send({ error: 'N\u00e3o autenticado' });
+        }
+        try {
+            const secret = await getJwtSecret();
+            jwt.verify(token, secret);
+        } catch {
+            reply.clearCookie('ceia_token', { path: '/' });
+            return reply.code(401).header('Content-Type', 'application/json; charset=utf-8').send({ error: 'Sess\u00e3o expirada. Fa\u00e7a login novamente.' });
+        }
+    });
+
+    // \u2500\u2500 Auth endpoints (sem JWT obrigat\u00f3rio) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    app.get('/auth/setup-needed', async (_request, reply) => {
+        const count = await contarUsuarios();
+        return reply.send({ needed: count === 0 });
+    });
+
+    app.post('/auth/setup', async (request: any, reply) => {
+        const count = await contarUsuarios();
+        if (count > 0) return reply.code(403).send({ error: 'Setup j\u00e1 foi realizado.' });
+
+        const { whatsapp, senha, telegram_id } = request.body || {};
+        if (!whatsapp || !senha) return reply.code(400).send({ error: 'WhatsApp e senha s\u00e3o obrigat\u00f3rios.' });
+        if (senha.length < 6) return reply.code(400).send({ error: 'A senha deve ter no m\u00ednimo 6 caracteres.' });
+
+        const hash = await bcrypt.hash(senha, 12);
+        await criarUsuario(whatsapp, hash, telegram_id || undefined);
+
+        const secret = await getJwtSecret();
+        const token = jwt.sign({ whatsapp }, secret, { expiresIn: '8h' });
+        reply.setCookie('ceia_token', token, { httpOnly: true, path: '/', maxAge: 8 * 3600, sameSite: 'lax' });
+        return reply.send({ ok: true });
+    });
+
+    app.post('/auth/login', async (request: any, reply) => {
+        const { whatsapp, senha } = request.body || {};
+        if (!whatsapp || !senha) return reply.code(400).send({ error: 'Preencha todos os campos.' });
+
+        const usuario = await getUsuarioPorWhatsapp(whatsapp);
+        if (!usuario) return reply.code(401).send({ error: 'Credenciais inv\u00e1lidas.' });
+
+        const valido = await bcrypt.compare(senha, usuario.senha_hash);
+        if (!valido) return reply.code(401).send({ error: 'Credenciais inv\u00e1lidas.' });
+
+        const secret = await getJwtSecret();
+        const token = jwt.sign({ whatsapp }, secret, { expiresIn: '8h' });
+        reply.setCookie('ceia_token', token, { httpOnly: true, path: '/', maxAge: 8 * 3600, sameSite: 'lax' });
+        return reply.send({ ok: true });
+    });
+
+    app.get('/auth/check', async (request: any, reply) => {
+        const token: string | undefined = request.cookies?.ceia_token;
+        if (!token) return reply.code(401).send({ ok: false });
+        try {
+            const secret = await getJwtSecret();
+            jwt.verify(token, secret);
+            return reply.send({ ok: true });
+        } catch {
+            reply.clearCookie('ceia_token', { path: '/' });
+            return reply.code(401).send({ ok: false });
+        }
+    });
+
+    app.post('/auth/logout', async (_request, reply) => {
+        reply.clearCookie('ceia_token', { path: '/' });
+        return reply.send({ ok: true });
+    });
+
+    app.post('/api/auth/alterar-senha', async (request: any, reply) => {
+        const { senha_atual, nova_senha } = request.body || {};
+        if (!senha_atual || !nova_senha) return reply.code(400).send({ error: 'Preencha todos os campos.' });
+        if (nova_senha.length < 6) return reply.code(400).send({ error: 'A nova senha deve ter no m\u00ednimo 6 caracteres.' });
+
+        const secret = await getJwtSecret();
+        const payload = jwt.verify(request.cookies.ceia_token, secret) as { whatsapp: string };
+        const usuario = await getUsuarioPorWhatsapp(payload.whatsapp);
+
+        const valido = await bcrypt.compare(senha_atual, usuario.senha_hash);
+        if (!valido) return reply.code(401).send({ error: 'Senha atual incorreta.' });
+
+        await atualizarSenhaUsuario(usuario.id, await bcrypt.hash(nova_senha, 12));
+        return reply.send({ ok: true });
+    });
+
+    // \u2500\u2500 P\u00e1ginas e API \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     app.get('/', async (request, reply) => {
         const htmlPath = path.join(__dirname, 'index.html');
@@ -35,19 +140,51 @@ export async function startServer() {
         return reply.type('text/html').send(htmlContent);
     });
 
-    app.get('/api/profile', async (request, reply) => {
-        console.log('📡 [TELA] Solicitou os dados do QG Logístico...');
+    app.get('/api/profile/public', async (request, reply) => {
         const config = await getConfiguracoes();
-        console.log('📦 [SISTEMA] Devolvendo chaves e horários para a tela.');
+        if (!config) return reply.code(200).type('application/json; charset=utf-8').send({});
+        const { nome, documento, endereco, whatsapp, link_cardapio, horarios } = config;
+        return reply.code(200).type('application/json; charset=utf-8').send({ nome, documento, endereco, whatsapp, link_cardapio, horarios });
+    });
+
+    app.get('/api/profile/admin', async (request, reply) => {
+        const config = await getConfiguracoes();
         return reply.code(200).type('application/json; charset=utf-8').send(config || {});
     });
 
-    app.post('/api/profile', async (request: any, reply) => {
-        console.log('💾 [TELA] Pediu para gravar novas configurações...');
-        await updateConfiguracoes(request.body);
-        await broadcastLog('SUCCESS', 'Configurações atualizadas via Painel');
+    app.post('/api/profile/admin', async (request: any, reply) => {
+        const body = request.body as Record<string, any>;
+        const PLACEHOLDER = 'Configurado \u2713';
+        const chaveFields = ['google_maps_key', 'openai_key', 'telegram_bot_token'];
+        for (const field of chaveFields) {
+            if (body[field] === PLACEHOLDER || body[field] === '') {
+                body[field] = null;
+            }
+        }
+        await updateConfiguracoes(body);
+        await broadcastLog('SUCCESS', 'Configura\u00e7\u00f5es atualizadas via Painel');
         iniciarTelegram();
-        console.log('🟢 [SISTEMA] Banco SQLite atualizado com sucesso!');
+
+        // Geocoding autom\u00e1tico do endere\u00e7o
+        const config = await getConfiguracoes();
+        if (body.endereco && config?.google_maps_key) {
+            const enderecoEncoded = encodeURIComponent(body.endereco);
+            const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${enderecoEncoded}&key=${config.google_maps_key}`;
+            fetch(geocodeUrl, { signal: AbortSignal.timeout(8000) })
+                .then(async (res) => {
+                    const data = await res.json() as { status: string; results: { geometry: { location: { lat: number; lng: number } } }[] };
+                    console.log('[GEOCODING] status:', data.status, '| results:', data.results?.length ?? 0);
+                    if (data.status === 'OK' && data.results?.[0]) {
+                        const { lat, lng } = data.results[0].geometry.location;
+                        console.log('[GEOCODING] lat:', lat, '| lng:', lng, '| endere\u00e7o:', body.endereco);
+                        await updateConfiguracoes({ lat, lng });
+                    } else {
+                        console.warn('[GEOCODING] Sem resultado para o endere\u00e7o:', body.endereco);
+                    }
+                })
+                .catch(e => console.error('[GEOCODING] Erro no fetch:', e.message));
+        }
+
         return reply.code(200).type('application/json; charset=utf-8').send({ status: 'success' });
     });
 
@@ -58,13 +195,13 @@ export async function startServer() {
 
     app.delete('/api/fleet/:id', async (request: any, reply) => {
         await deletarMotoboy(request.params.id);
-        await broadcastLog('FROTA', 'Perfil de motoboy e histórico excluídos.');
+        await broadcastLog('FROTA', 'Perfil de motoboy e hist\u00f3rico exclu\u00eddos.');
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.put('/api/fleet/:id', async (request: any, reply) => {
-        const { veiculo, vinculo } = request.body;
-        await atualizarMotoboy(request.params.id, veiculo, vinculo);
+        const { veiculo, vinculo, nome, whatsapp, pix } = request.body;
+        await atualizarMotoboy(request.params.id, veiculo, vinculo, nome, whatsapp, pix);
         await broadcastLog('FROTA', 'Perfil de motoboy atualizado.');
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
@@ -76,17 +213,27 @@ export async function startServer() {
 
     app.post('/api/financeiro/pagar/:id', async (request: any, reply) => {
         const telegram_id = request.params.id;
+        const extrato = await getExtratoFinanceiro(telegram_id);
         await zerarAcertoFinanceiro(telegram_id);
+        const valorTotal = extrato?.total_geral ?? 0;
+        if (valorTotal > 0) {
+            await inserirHistoricoMotoboy(telegram_id, 'ACERTO', valorTotal, `Acerto liquidado: ${extrato.qtd} corrida(s)`);
+        }
         await broadcastLog('FINANCEIRO', 'Acerto de motoboy liquidado com sucesso.');
 
+        await atualizarCamposMotoboy(telegram_id, { status: 'aguardando_confirmacao' });
+
         const motoboy = await getMotoboyByTelegramId(telegram_id);
-        if (motoboy && motoboy.vinculo === 'Nuvem') {
-            await enviarMensagemTelegram(telegram_id, '💸 Acerto recebido! Obrigado por rodar connosco hoje. A sua sessão nesta loja foi encerrada.');
-            await deletarMotoboy(telegram_id);
-            await broadcastLog('NUVEM', `Motoboy Nuvem [${motoboy.nome}] finalizou o ciclo e foi removido da base.`);
+        if (motoboy?.telegram_id) {
+            await enviarConfirmacaoPagamento(motoboy.telegram_id, telegram_id, valorTotal);
         }
 
-        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true, aguardando_confirmacao: true });
+    });
+
+    app.get('/api/historico/:telegram_id', async (request: any, reply) => {
+        const historico = await getHistoricoMotoboy(request.params.telegram_id);
+        return reply.code(200).type('application/json; charset=utf-8').send(historico);
     });
 
     app.post('/api/nuvem/receber-convite', async (request: any, reply) => {
@@ -95,7 +242,7 @@ export async function startServer() {
         const motoboy = frota.find((m: any) => m.telegram_id === telegram_id);
 
         if (!motoboy) {
-            return reply.code(404).type('application/json; charset=utf-8').send({ error: 'Motoboy não encontrado na base local.' });
+            return reply.code(404).type('application/json; charset=utf-8').send({ error: 'Motoboy n\u00e3o encontrado na base local.' });
         }
 
         await repassarConviteNuvem(telegram_id, { loja_destino_nome, link_bot_destino, taxa_estimada });
@@ -108,18 +255,21 @@ export async function startServer() {
 
         const config = await getConfiguracoes();
         if (!config.openai_key) {
-            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Chave OpenAI não configurada no QG Logístico.' });
+            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Chave OpenAI n\u00e3o configurada no QG Log\u00edstico.' });
         }
 
         let resumoBairros;
         try {
-            const allEnderecos = pedidos.map((p: any) => p.endereco).join('\n');
+            const allEnderecos = pedidos.map((p: any) => p.endereco).join('\\
+');
             const resOpenAI = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.openai_key}` },
                 body: JSON.stringify({
                     model: 'gpt-4o-mini',
-                    messages: [{ role: 'user', content: `Resuma os bairros destes endereços em no máximo 4 palavras:\n\n${allEnderecos}` }],
+                    messages: [{ role: 'user', content: `Resuma os bairros destes endere\u00e7os em no m\u00e1ximo 4 palavras:\\
+\\
+${allEnderecos}` }],
                     max_tokens: 20
                 })
             });
@@ -128,21 +278,183 @@ export async function startServer() {
             resumoBairros = data.choices[0].message.content.trim();
         } catch (e) {
             console.error('FALHA NA OPENAI:', e);
-            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'A IA não conseguiu analisar os endereços desta rota.' });
+            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'A IA n\u00e3o conseguiu analisar os endere\u00e7os desta rota.' });
         }
 
         const totalTaxa = pedidos.reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
-        const msgMotoboy = `🚀 *NOVA ROTA DE ENTREGA!*\n\n*Setor:* ${resumoBairros}\n*Qtd:* ${pedidos.length} entregas\n*Total a Faturar:* R$ ${totalTaxa.toFixed(2)}`;
+        const msgMotoboy = `\ud83d\ude80 *NOVA ROTA DE ENTREGA!*\\
+\\
+*Setor:* ${resumoBairros}\\
+*Qtd:* ${pedidos.length} entregas\\
+*Total a Faturar:* R$ ${totalTaxa.toFixed(2)}`;
+
+        try {
+            for (const pedido of pedidos) {
+                if (pedido?.id) await savePedido(pedido);
+            }
+            const pacotesRaw = await getPacotes();
+            const pacotesDb = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+            const pacoteParaSalvar = pacotesDb.find((p: any) => p.id === pacoteId);
+            if (pacoteParaSalvar) {
+                pacoteParaSalvar.status = 'PENDENTE_ACEITE';
+                pacoteParaSalvar.motoboy = motoboy;
+                pacoteParaSalvar.pedidos_snapshot = pedidos.filter((p: any) => p?.id);
+                await savePacote(pacoteParaSalvar);
+            }
+        } catch (e) {
+            console.error('[DESPACHAR] Falha ao persistir pacote/pedidos no banco:', e);
+        }
 
         await enviarConviteRotaTelegram(motoboy.telegram_id, msgMotoboy, pacoteId);
-
-        await broadcastLog('SISTEMA', `Convite de rota enviado para ${motoboy.nome}. Aguardando aceite.`);
+        await broadcastLog('SISTEMA', `Convite de rota enviado para ${motoboy.nome}. Aguardando aceite do motoboy.`);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+    });
+
+    // \u2500\u2500 Despacho presencial via QR Code \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    app.post('/api/operacao/gerar-qr', async (request: any, reply) => {
+        const { pacoteId, motoboy } = request.body || {};
+        if (!pacoteId || !motoboy) return reply.code(400).send({ error: 'pacoteId e motoboy s\u00e3o obrigat\u00f3rios.' });
+
+        const token = crypto.randomUUID();
+        dispatchTokens.set(token, { pacoteId, motoboy, expiresAt: Date.now() + 30 * 60 * 1000 });
+
+        const host = request.headers['x-forwarded-host'] || request.headers.host;
+        const proto = request.headers['x-forwarded-proto'] || 'http';
+        const url = `${proto}://${host}/rota/${token}`;
+        const qrBase64 = await QRCode.toDataURL(url, { width: 300, margin: 2, color: { dark: '#0f172a', light: '#ffffff' } });
+
+        return reply.send({ token, url, qrBase64 });
+    });
+
+    app.get('/rota/:token', async (request: any, reply) => {
+        const dispatch = dispatchTokens.get(request.params.token);
+        if (!dispatch || dispatch.expiresAt < Date.now()) {
+            return reply.type('text/html; charset=utf-8').send(`<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Link expirado</title><style>body{font-family:sans-serif;text-align:center;padding:60px 20px;background:#f1f5f9}h2{color:#ef4444}p{color:#64748b}</style></head><body><h2>\u274c Link expirado</h2><p>Este convite n\u00e3o \u00e9 mais v\u00e1lido.<br>Pe\u00e7a um novo QR Code ao operador.</p></body></html>`);
+        }
+
+        const [pacotesRaw, pedidosRaw] = await Promise.all([getPacotes(), getPedidos()]);
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacote = pacotes.find((p: any) => p.id === dispatch.pacoteId);
+        if (!pacote) return reply.type('text/html; charset=utf-8').send('<html><body><h2>Pacote n\u00e3o encontrado.</h2></body></html>');
+
+        const stops = (pacote.pedidosIds || []).map((id: string) => pedidos.find((p: any) => p.id === id)).filter(Boolean);
+        const totalTaxa = stops.reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
+
+        const listaHTML = stops.map((p: any, i: number) => {
+            const enc = encodeURIComponent(p.endereco);
+            return `<div class=\"stop\"><div class=\"stop-num\">${i + 1}</div><div class=\"stop-info\"><div class=\"stop-cliente\">${p.nomeCliente || p.cliente_nome || 'Cliente'}</div><div class=\"stop-end\">${p.endereco}</div><div class=\"stop-links\"><a href=\"https://waze.com/ul?q=${enc}\" class=\"link-waze\">\ud83d\uddfa Waze</a><a href=\"https://maps.google.com/?q=${enc}\" class=\"link-maps\">\ud83d\udccd Maps</a></div></div></div>`;
+        }).join('');
+
+        const html = `<!DOCTYPE html>
+<html lang=\"pt-BR\">
+<head>
+<meta charset=\"UTF-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0\">
+<title>Nova Rota</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh;padding:16px}
+.card{background:#fff;border-radius:16px;padding:20px;max-width:480px;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+.header{text-align:center;padding-bottom:16px;border-bottom:1px solid #e2e8f0;margin-bottom:16px}
+.title{font-size:1.5rem;font-weight:700;color:#0f172a}
+.subtitle{font-size:.9rem;color:#64748b;margin-top:4px}
+.stats{display:flex;gap:10px;margin-bottom:16px}
+.stat{flex:1;background:#f8fafc;border-radius:10px;padding:12px;text-align:center}
+.stat-v{font-size:1.4rem;font-weight:700;color:#0f172a}
+.stat-l{font-size:.72rem;color:#64748b;margin-top:2px}
+.stop{display:flex;gap:12px;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:10px}
+.stop-num{width:28px;height:28px;background:#0f172a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;margin-top:2px}
+.stop-info{flex:1}
+.stop-cliente{font-weight:600;color:#0f172a;margin-bottom:2px}
+.stop-end{font-size:.82rem;color:#475569;margin-bottom:8px}
+.stop-links{display:flex;gap:8px}
+.link-waze,.link-maps{flex:1;padding:7px;border-radius:6px;text-align:center;text-decoration:none;font-size:.8rem;font-weight:600}
+.link-waze{background:#33ccff;color:#fff}
+.link-maps{background:#34a853;color:#fff}
+#btn-aceitar{width:100%;background:#22c55e;color:#fff;border:none;padding:18px;border-radius:12px;font-size:1.1rem;font-weight:700;cursor:pointer;margin-top:16px;transition:background .15s}
+#btn-aceitar:active{background:#16a34a}
+#btn-aceitar:disabled{background:#86efac;cursor:default}
+.success{text-align:center;padding:40px 0}
+.success-icon{font-size:3.5rem}
+.success-msg{font-size:1.3rem;font-weight:700;color:#15803d;margin-top:14px}
+.success-sub{font-size:.9rem;color:#64748b;margin-top:6px}
+</style>
+</head>
+<body>
+<div class=\"card\" id=\"main\">
+  <div class=\"header\">
+    <div class=\"title\">\ud83d\udef5 Nova Rota!</div>
+    <div class=\"subtitle\">Ol\u00e1, ${dispatch.motoboy.nome.split(' ')[0]}. Confira as entregas abaixo.</div>
+  </div>
+  <div class=\"stats\">
+    <div class=\"stat\"><div class=\"stat-v\">${stops.length}</div><div class=\"stat-l\">Paradas</div></div>
+    <div class=\"stat\"><div class=\"stat-v\">R$ ${totalTaxa.toFixed(2)}</div><div class=\"stat-l\">A faturar</div></div>
+  </div>
+  ${listaHTML}
+  <button id=\"btn-aceitar\" onclick=\"aceitar()\">\u2705 ACEITAR ROTA</button>
+</div>
+<script>
+async function aceitar(){
+  const btn=document.getElementById('btn-aceitar');
+  btn.disabled=true; btn.textContent='Confirmando...';
+  try{
+    const res=await fetch(location.href,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({aceitar:true})});
+    const data=await res.json();
+    if(res.ok&&data.ok){
+      document.getElementById('main').innerHTML='<div class=\"success\"><div class=\"success-icon\">\u2705</div><div class=\"success-msg\">Rota aceita!</div><div class=\"success-sub\">Boa entrega! \ud83c\udfc1</div></div>';
+    } else {
+      btn.disabled=false; btn.textContent='\u2705 ACEITAR ROTA';
+      alert(data.error||'Erro ao aceitar. Tente novamente.');
+    }
+  } catch(e){
+    btn.disabled=false; btn.textContent='\u2705 ACEITAR ROTA';
+    alert('Falha de conex\u00e3o. Verifique sua internet.');
+  }
+}
+</script>
+</body>
+</html>`;
+        return reply.type('text/html; charset=utf-8').send(html);
+    });
+
+    app.post('/rota/:token', async (request: any, reply) => {
+        const dispatch = dispatchTokens.get(request.params.token);
+        if (!dispatch || dispatch.expiresAt < Date.now()) {
+            return reply.code(410).send({ error: 'Link expirado. Pe\u00e7a um novo QR Code ao operador.' });
+        }
+
+        const { pacoteId, motoboy } = dispatch;
+        dispatchTokens.delete(request.params.token);
+
+        const [pacotesRaw, pedidosRaw] = await Promise.all([getPacotes(), getPedidos()]);
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacote = pacotes.find((p: any) => p.id === pacoteId);
+        if (!pacote) return reply.code(404).send({ error: 'Pacote n\u00e3o encontrado.' });
+
+        pacote.motoboy = motoboy;
+        pacote.status = 'EM_ROTA';
+        await savePacote(pacote);
+
+        for (const pId of pacote.pedidosIds || []) {
+            const p = pedidos.find((ped: any) => ped.id === pId);
+            const tel = p?.telefone || p?.telefoneCliente || p?.whatsapp || p?.telefone_cliente;
+            if (p && tel) {
+                const num = tel.replace(/\D/g, '');
+                if (num.length >= 10) {
+                    await enviarMensagemWhatsApp(`55${num}`, `Ol\u00e1, ${(p.nomeCliente || 'cliente').split(' ')[0]}! Seu pedido saiu para entrega com ${motoboy.nome.split(' ')[0]}. \ud83d\udef5\ud83d\udca8`);
+                }
+            }
+        }
+
+        broadcastLog('ACEITE_ROTA', `${motoboy.nome.split(' ')[0]} aceitou a rota via QR! Rota em andamento.`, { pacoteId });
+        return reply.send({ ok: true });
     });
 
     app.post('/api/operacao/sos/reply', async (request: any, reply) => {
         const { telegram_id, texto } = request.body;
-        console.log('[DEBUG SOS] O Painel tentou enviar mensagem para o ID:', request.body.telegram_id, '| Texto:', request.body.texto);
         await enviarMensagemTelegram(telegram_id, texto);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
@@ -150,10 +462,45 @@ export async function startServer() {
     app.post('/api/sac/reply', async (request: any, reply) => {
         const { jid, texto } = request.body;
         const sucesso = await enviarMensagemWhatsApp(jid, texto, 'SISTEMA', 'atendimento_humano', 'Atendente');
-        if (sucesso) {
-            return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
-        }
+        if (sucesso) return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
         return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no envio da mensagem via WhatsApp.' });
+    });
+
+    app.post('/api/operacao/coletar', async (request: any, reply) => {
+        const { pacoteId } = request.body || {};
+        if (!pacoteId) return reply.code(400).send({ error: 'pacoteId \u00e9 obrigat\u00f3rio.' });
+
+        const pacotesRaw = await getPacotes();
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacote = pacotes.find((p: any) => p.id === pacoteId);
+        if (!pacote) return reply.code(404).send({ error: 'Pacote n\u00e3o encontrado.' });
+
+        pacote.coletado = true;
+        await savePacote(pacote);
+
+        if (pacote.motoboy?.telegram_id) {
+            await enviarMensagemTelegram(pacote.motoboy.telegram_id, '\u2705 *Coleta confirmada pela loja!* Os pacotes est\u00e3o com voc\u00ea. Boa rota!');
+        }
+
+        const pedidosRaw = await getPedidos();
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        for (const pId of pacote.pedidosIds || []) {
+            const p = pedidos.find((ped: any) => ped.id === pId);
+            const telefoneCliente = p?.telefone || p?.telefoneCliente || p?.whatsapp || p?.telefone_cliente;
+            if (p && telefoneCliente) {
+                const num = telefoneCliente.replace(/\D/g, '');
+                if (num.length >= 10) {
+                    const nomeSplit = p.nomeCliente ? p.nomeCliente.split(' ')[0] : 'cliente';
+                    const msgCliente = `Ol\u00e1, ${nomeSplit}! O seu pedido acabou de sair para entrega com o parceiro *${pacote.motoboy.nome}*. \ud83d\udef5\ud83d\udca8\\
+\\
+\u26a0\ufe0f *Aten\u00e7\u00e3o:* Para a seguran\u00e7a da sua entrega, informe o c\u00f3digo *${p.codigo_entrega}* ao motoboy quando ele chegar.`;
+                    await enviarMensagemWhatsApp('55' + num, msgCliente);
+                }
+            }
+        }
+
+        await broadcastLog('OPERACAO', `Coleta confirmada para o pacote ${pacoteId}.`);
+        return reply.send({ ok: true });
     });
 
     app.post('/api/operacao/baixa', async (request: any, reply) => {
@@ -170,10 +517,11 @@ export async function startServer() {
         findRota:
         for (const pacote of pacotesAtivos) {
             for (const pId of pacote.pedidosIds) {
-                if (pId === pedidoId) {
-                    const pedido = pedidos.find((p: any) => p.id === pedidoId);
-                    if (pedido) {
-                        rotaInfo = { telegram_id: pacote.motoboy.telegram_id, pedido: pedido };
+                if (String(pId) === String(pedidoId)) {
+                    const pedido = pedidos.find((p: any) => String(p.id) === String(pedidoId))
+                        || (pacote.pedidos_snapshot || []).find((p: any) => String(p.id) === String(pedidoId));
+                    if (pedido && pacote.motoboy) {
+                        rotaInfo = { telegram_id: pacote.motoboy.telegram_id, pedido, pacote };
                         break findRota;
                     }
                 }
@@ -182,7 +530,24 @@ export async function startServer() {
 
         if (rotaInfo) {
             await registrarEntrega(rotaInfo.telegram_id, rotaInfo.pedido.taxa);
-            await broadcastLog('FINANCEIRO', `Baixa manual concluída. Taxa de R$${(rotaInfo.pedido.taxa || 0).toFixed(2)} faturada.`);
+            const nomeCliente = rotaInfo.pedido.nomeCliente || 'Cliente';
+            await inserirHistoricoMotoboy(rotaInfo.telegram_id, 'ENTREGA', rotaInfo.pedido.taxa || 0, `Entrega para ${nomeCliente}`);
+            await broadcastLog('FINANCEIRO', `Baixa manual conclu\u00edda. Taxa de R$${(rotaInfo.pedido.taxa || 0).toFixed(2)} faturada.`);
+
+            if (rotaInfo.pacote) {
+                const pac = rotaInfo.pacote;
+                if (pac.pedidos_snapshot) {
+                    pac.pedidos_snapshot = pac.pedidos_snapshot.filter((p: any) => String(p.id) !== String(pedidoId));
+                }
+                pac.pedidosIds = (pac.pedidosIds || []).filter((id: string) => String(id) !== String(pedidoId));
+                if (pac.pedidosIds.length === 0) {
+                    await deletePacote(pac.id);
+                    await atualizarCamposMotoboy(rotaInfo.telegram_id, { status: 'ONLINE' });
+                } else {
+                    await savePacote(pac);
+                }
+            }
+            await deletePedido(pedidoId);
         }
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
@@ -199,11 +564,10 @@ export async function startServer() {
     app.post('/api/whatsapp/send', async (request: any, reply) => {
         const { numero, texto } = request.body;
         const sucesso = await enviarMensagemWhatsApp(numero, texto);
-        if (sucesso) {
-            return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
-        }
+        if (sucesso) return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
         return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no disparo via API' });
     });
+
 
     app.get('/api/pedidos', async (req, reply) => {
         const pedidos = await getPedidos();
@@ -253,6 +617,221 @@ export async function startServer() {
         return reply.send({ ok: true });
     });
 
+    app.get('/api/parceiros', async (_request, reply) => {
+        const parceiros = await getNosParceiros();
+        return reply.send(parceiros);
+    });
+
+    app.post('/api/parceiros', async (request: any, reply) => {
+        const { nome, url } = request.body || {};
+        if (!nome || !url) return reply.code(400).send({ error: 'Nome e URL s\u00e3o obrigat\u00f3rios.' });
+        const id = crypto.randomUUID();
+        await saveNoParceiro(id, nome.trim(), url.trim().replace(/\/$/, ''));
+        return reply.send({ ok: true, id });
+    });
+
+    app.delete('/api/parceiros/:id', async (request: any, reply) => {
+        await deleteNoParceiro(request.params.id);
+        return reply.send({ ok: true });
+    });
+
+    app.get('/api/frota-compartilhada/disponiveis', async (_request, reply) => {
+        const config = await getConfiguracoes();
+        const agora = new Date();
+        const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+        const diaKey = diasSemana[agora.getDay()];
+        const horaAtual = agora.getHours() * 60 + agora.getMinutes();
+
+        let dentrDoExpediente = false;
+        if (config?.horarios) {
+            const dia = config.horarios[diaKey];
+            if (dia?.ativo && dia.abre && dia.fecha) {
+                const [ah, am] = dia.abre.split(':').map(Number);
+                const [fh, fm] = dia.fecha.split(':').map(Number);
+                const abre = ah * 60 + am;
+                const fecha = fh * 60 + fm;
+                
+                // CORRE\u00c7\u00c3O (BUG 5): Tratamento correto de expediente que vira a noite
+                if (abre <= fecha) {
+                    dentrDoExpediente = horaAtual >= abre && horaAtual < fecha;
+                } else {
+                    dentrDoExpediente = horaAtual >= abre || horaAtual < fecha;
+                }
+            }
+        }
+
+        if (dentrDoExpediente) return reply.send([]);
+
+        const motoboys = await getMotoboysOnline();
+        const disponiveis = motoboys
+            .filter((m: any) => m.status === 'ONLINE' && m.lat && m.lng)
+            .map((m: any) => ({
+                telegram_id: m.telegram_id,
+                nome: m.nome,
+                veiculo: m.veiculo,
+                lat: m.lat,
+                lng: m.lng
+            }));
+
+        return reply.send(disponiveis);
+    });
+
+    app.get('/api/frota-compartilhada/buscar', async (_request, reply) => {
+        const config = await getConfiguracoes();
+
+        console.log('[BUSCAR] lat:', config?.lat, 'lng:', config?.lng);
+
+        if ((!config?.lat || !config?.lng) && config?.google_maps_key && config?.endereco) {
+            try {
+                const geoRes = await fetch(
+                    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(config.endereco)}&key=${config.google_maps_key}`
+                );
+                const geoData = await geoRes.json() as { status: string; results: { geometry: { location: { lat: number; lng: number } } }[] };
+                if (geoData.status === 'OK') {
+                    const { lat, lng } = geoData.results[0].geometry.location;
+                    await updateConfiguracoes({ lat, lng });
+                    config.lat = lat;
+                    config.lng = lng;
+                    console.log('[GEOCODING] Coordenadas obtidas:', lat, lng);
+                }
+            } catch (e: any) {
+                console.error('[GEOCODING] Erro:', e.message);
+            }
+        }
+
+        try {
+            const lojaLat = config?.lat;
+            const lojaLng = config?.lng;
+            const buscarUrl = `${HUB_URL}/buscar?lat=${lojaLat || 0}&lng=${lojaLng || 0}`;
+            console.log('[BUSCAR NUVEM] URL do fetch:', buscarUrl);
+            const res = await fetch(buscarUrl, {
+                signal: AbortSignal.timeout(8000)
+            });
+            const bodyText = await res.text();
+            console.log('[BUSCAR NUVEM] Status HTTP:', res.status);
+            console.log('[BUSCAR NUVEM] Body:', bodyText);
+            if (!res.ok) {
+                return reply.code(502).send({ error: 'Falha ao consultar o Hub Central.' });
+            }
+            const resultados = JSON.parse(bodyText);
+            return reply.send(resultados);
+        } catch (e) {
+            console.error('[FROTA COMPARTILHADA] Hub Central inacess\u00edvel:', e);
+            return reply.code(502).send({ error: 'Hub Central inacess\u00edvel.' });
+        }
+    });
+
+    app.post('/api/frota-compartilhada/convidar', async (request: any, reply) => {
+        const { telegram_id, no_url, pacoteId, pedidos, taxa_deslocamento_brl, distancia_km, nome } = request.body || {};
+        if (!telegram_id || !no_url) return reply.code(400).send({ error: 'telegram_id e no_url s\u00e3o obrigat\u00f3rios.' });
+
+        const motoboyLocal = await getMotoboyByTelegramId(telegram_id);
+        if (motoboyLocal && (motoboyLocal.status === 'EM_ROTA' || motoboyLocal.pagamento_pendente === 1)) {
+            return reply.code(409).send({ error: 'Motoboy indispon\u00edvel: em rota ou com pagamento pendente.' });
+        }
+
+        const config = await getConfiguracoes();
+        const loja_nome = config?.nome || 'Loja Parceira';
+        const bot_username = config?.telegram_bot_token ? 'bot' : null;
+
+        const pedidos_resumo = (pedidos || []).map((p: any) => `${p.nomeCliente} \u2014 ${p.endereco}`).join('\\
+');
+        const taxa_entrega = (pedidos || []).reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
+        const taxa_desl = taxa_deslocamento_brl || 0;
+        const valor_total = taxa_desl + taxa_entrega;
+
+        if (no_url === 'GLOBAL') {
+            await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE' });
+            await broadcastLog('FROTA', `Parceiro Global ${nome || telegram_id} adicionado provisoriamente \u00e0 frota.`);
+
+            if (pacoteId) {
+                const pacotesRaw = await getPacotes();
+                const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+                const pacote = pacotes.find((p: any) => p.id === pacoteId);
+                if (pacote) {
+                    pacote.taxa_deslocamento = taxa_desl;
+                    pacote.deslocamento_pago = false;
+                    await savePacote(pacote);
+                }
+            }
+
+            const enviado = await repassarConviteNuvem(telegram_id, {
+                loja_destino_nome: loja_nome,
+                link_bot_destino: '',
+                taxa_estimada: taxa_desl,
+                distancia_km: distancia_km || 0,
+                taxa_deslocamento_brl: taxa_desl,
+                taxa_entrega,
+                valor_total,
+                pacote_id: pacoteId || ''
+            });
+            if (!enviado) return reply.code(502).send({ error: 'Falha ao enviar convite via bot local.' });
+            await broadcastLog('FROTA_COMPARTILHADA', `Convite Global enviado diretamente para motoboy ${telegram_id} via bot local`);
+            return reply.send({ ok: true });
+        }
+
+        try {
+            const res = await fetch(`${no_url}/api/frota-compartilhada/repassar-convite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    telegram_id,
+                    loja_nome,
+                    loja_bot_link: bot_username ? `https://t.me/${bot_username}?start=frota_${pacoteId}` : null,
+                    pedidos_resumo,
+                    taxa_total: taxa_desl,
+                    distancia_km: distancia_km || 0,
+                    taxa_deslocamento_brl: taxa_desl,
+                    taxa_entrega,
+                    valor_total,
+                    pacote_id: pacoteId || ''
+                }),
+                signal: AbortSignal.timeout(8000)
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                return reply.code(502).send({ error: err.error || 'N\u00f3 parceiro rejeitou o convite.' });
+            }
+            await broadcastLog('FROTA_COMPARTILHADA', `Convite enviado para motoboy ${telegram_id} via n\u00f3 ${no_url}`);
+            return reply.send({ ok: true });
+        } catch (e) {
+            return reply.code(502).send({ error: 'N\u00e3o foi poss\u00edvel contactar o n\u00f3 parceiro.' });
+        }
+    });
+
+    app.post('/api/frota-compartilhada/repassar-convite', async (request: any, reply) => {
+        const { telegram_id, loja_nome, loja_bot_link, pedidos_resumo, taxa_total, distancia_km, taxa_deslocamento_brl, taxa_entrega, valor_total, pacote_id } = request.body || {};
+        if (!telegram_id || !loja_nome) return reply.code(400).send({ error: 'Dados insuficientes.' });
+
+        const motoboy = await getMotoboyByTelegramId(telegram_id);
+        if (!motoboy) return reply.code(404).send({ error: 'Motoboy n\u00e3o encontrado neste n\u00f3.' });
+
+        if (pacote_id) {
+            const pacotesRaw = await getPacotes();
+            const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+            const pacote = pacotes.find((p: any) => p.id === pacote_id);
+            if (pacote) {
+                pacote.taxa_deslocamento = Number(taxa_deslocamento_brl || taxa_total || 0);
+                pacote.deslocamento_pago = false;
+                await savePacote(pacote);
+            }
+        }
+
+        await repassarConviteNuvem(telegram_id, {
+            loja_destino_nome: loja_nome,
+            link_bot_destino: loja_bot_link || '',
+            taxa_estimada: Number(taxa_total || 0),
+            distancia_km: Number(distancia_km || 0),
+            taxa_deslocamento_brl: Number(taxa_deslocamento_brl || taxa_total || 0),
+            taxa_entrega: Number(taxa_entrega || 0),
+            valor_total: Number(valor_total || 0),
+            pacote_id: pacote_id || ''
+        });
+
+        await broadcastLog('FROTA_COMPARTILHADA', `Convite de ${loja_nome} repassado para ${motoboy.nome}.`);
+        return reply.send({ ok: true });
+    });
+
     app.register(async (instance) => {
         instance.get('/ws/logs', { websocket: true }, (connection) => {
             connection.send(JSON.stringify({ tipo: 'SYSTEM', mensagem: 'Conectado ao terminal de Logs.', data: new Date().toISOString() }));
@@ -274,9 +853,82 @@ export async function startServer() {
 
     setTimeout(checkInactiveDrivers, 60000);
 
+    setInterval(async () => {
+        try {
+            console.log('[HUB SYNC] Ciclo executando \u00e0s:', new Date().toLocaleTimeString('pt-BR'));
+            const config = await getConfiguracoes();
+            const agora = new Date();
+            const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+            const diaKey = diasSemana[agora.getDay()];
+            const horaAtual = agora.getHours() * 60 + agora.getMinutes();
+
+            let dentroDoExpediente = false;
+            if (config?.horarios) {
+                const dia = config.horarios[diaKey];
+                if (dia?.ativo && dia.abre && dia.fecha) {
+                    const [ah, am] = dia.abre.split(':').map(Number);
+                    const [fh, fm] = dia.fecha.split(':').map(Number);
+                    const abre = ah * 60 + am;
+                    const fecha = fh * 60 + fm;
+                    
+                    // CORRE\u00c7\u00c3O (BUG 5): Tratamento correto de expediente que vira a noite
+                    if (abre <= fecha) {
+                        dentroDoExpediente = horaAtual >= abre && horaAtual < fecha;
+                    } else {
+                        dentroDoExpediente = horaAtual >= abre || horaAtual < fecha;
+                    }
+                }
+            }
+
+            const motoboys = await getMotoboysOnline();
+            const online = motoboys.filter((m: any) =>
+                m.status === 'ONLINE' && m.lat && m.lng &&
+                (m.vinculo === 'Nuvem' || !dentroDoExpediente)
+            );
+            console.log('[HUB SYNC] dentroDoExpediente:', dentroDoExpediente,
+                '| online no radar:', motoboys.length,
+                '| passaram no filtro:', online.length,
+                '|', online.map((m: any) => `${m.nome}(${m.vinculo})`).join(', ') || 'nenhum');
+            const noUrl = config?.url_publica || LOJA_URL;
+            console.log('[HUB SYNC] noUrl:', noUrl, '| HUB_URL:', HUB_URL);
+            if (!noUrl || online.length === 0) return;
+
+            for (const m of online) {
+                fetch(`${HUB_URL}/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, lat: m.lat, lng: m.lng, no_url: noUrl, no_nome: config?.nome || 'Loja Parceira' }),
+                    signal: AbortSignal.timeout(5000)
+                }).then(async (res) => {
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        console.error(`[HUB SYNC] ERRO ${res.status} da HostGator:`, errText);
+                    } else {
+                        console.log(`[HUB SYNC] Sucesso! ${m.nome} atualizado na Nuvem.`);
+                    }
+                }).catch(e => console.error('[HUB SYNC] Falha de rede:', e.message));
+            }
+        } catch (e) {
+            console.error('[HUB SYNC] Erro no intervalo de sincroniza\u00e7\u00e3o:', e);
+        }
+    }, 2 * 60 * 1000);
+
+    app.get('/api/gerar-token-bot', async (_request, reply) => {
+        const token = await gerarTokenCadastro();
+        return reply.send({ token });
+    });
+
+    setInterval(async () => {
+        try {
+            await limparParceirosNuvemExpirados();
+        } catch (e) {
+            console.error('[LIMPEZA NUVEM] Erro na limpeza hor\u00e1ria:', e);
+        }
+    }, 60 * 60 * 1000);
+
     await app.listen({ port: 3000, host: '0.0.0.0' });
-    console.log('🚀 SERVIDOR CEIA NO AR: Aceda a http://localhost:3000 no navegador');
-    console.log('✅ Tudo pronto e operando!');
+    console.log('\ud83d\ude80 SERVIDOR CEIA NO AR: Aceda a http://localhost:3000 no navegador');
+    console.log('\u2705 Tudo pronto e operando!');
 
     iniciarTelegram();
 }
