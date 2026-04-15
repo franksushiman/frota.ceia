@@ -260,8 +260,7 @@ export async function startServer() {
 
         let resumoBairros;
         try {
-            const allEnderecos = pedidos.map((p: any) => p.endereco).join('\\
-');
+            const allEnderecos = pedidos.map((p: any) => p.endereco).join('\n');
             const resOpenAI = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.openai_key}` },

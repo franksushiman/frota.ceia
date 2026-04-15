@@ -111,7 +111,7 @@ export async function initDatabase(): Promise<Database> {
         `);
 
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN jwt_secret TEXT;'); } catch (e) {}
-        try { await database.exec(\"ALTER TABLE configuracoes ADD COLUMN whatsapp_provider TEXT DEFAULT 'baileys';\"); } catch (e) {}
+        try { await database.exec("ALTER TABLE configuracoes ADD COLUMN whatsapp_provider TEXT DEFAULT 'baileys';"); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN meta_phone_number_id TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN documento TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN whatsapp_ativo INTEGER DEFAULT 1;'); } catch (e) {}

@@ -1,6 +1,6 @@
 import { startServer } from './server';
 import { initDatabase } from './database';
-import { iniciarWhatsApp } from './whatsappBot';
+import { iniciarWhatsApp } from './whatsapp/index';
 
 async function bootstrap() {
     try {
