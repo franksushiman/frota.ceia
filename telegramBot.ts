@@ -20,12 +20,12 @@ export let bot: Telegraf | null = null;
 let botLaunchPromise: Promise<void> | null = null;
 
 export async function enviarMensagemTelegram(telegram_id: string, texto: string) {
-    if (bot === null) { console.error(\"[DEBUG TELEGRAM] ERRO FATAL: O bot esta null na hora de enviar\"); return false; }
+    if (bot === null) { console.error("[DEBUG TELEGRAM] ERRO FATAL: O bot esta null na hora de enviar"); return false; }
     try {
         await bot.telegram.sendMessage(telegram_id, texto);
-        console.log(\"[DEBUG TELEGRAM] Telegram confirmou o envio com sucesso\");
+        console.log("[DEBUG TELEGRAM] Telegram confirmou o envio com sucesso");
         return true;
-    } catch (e) { console.error(\"[DEBUG TELEGRAM] Falha cr\u00edtica ao enviar:\", e); return false; }
+    } catch (e) { console.error("[DEBUG TELEGRAM] Falha cr\u00edtica ao enviar:", e); return false; }
 }
 
 interface DadosConviteNuvem {
@@ -75,7 +75,7 @@ export async function repassarConviteNuvem(telegram_id: string, dados_loja: Dado
         });
         return true;
     } catch (e) {
-        console.error(\"Falha ao repassar convite nuvem:\", e);
+        console.error("Falha ao repassar convite nuvem:", e);
         return false;
     }
 }
@@ -197,7 +197,7 @@ export async function iniciarTelegram() {
                     broadcastLog('NUVEM', `Motoboy ${nomeNuvem} aceitou um convite da rede e est\u00e1 se registrando.`);
                     await ctx.reply(`Bem-vindo \u00e0 loja! Voc\u00ea aceitou a rota Nuvem. \u2601\ufe0f\ud83d\udef5\\
 \\
-\ud83d\udccd **\u00daLTIMO PASSO:** Como voc\u00ea mudou para o bot da loja, precisamos do seu GPS para rastrear sua chegada. Toque no \u00edcone de clipe (\ud83d\udcce), escolha \"Localiza\u00e7\u00e3o\" e envie sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para liberar os detalhes da entrega.`, Markup.removeKeyboard());
+\ud83d\udccd **\u00daLTIMO PASSO:** Como voc\u00ea mudou para o bot da loja, precisamos do seu GPS para rastrear sua chegada. Toque no \u00edcone de clipe (\ud83d\udcce), escolha "Localiza\u00e7\u00e3o" e envie sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para liberar os detalhes da entrega.`, Markup.removeKeyboard());
                     return;
                 }
 
@@ -260,7 +260,7 @@ Vamos iniciar seu cadastro. Por favor, digite seu **Nome Completo**:`, Markup.re
             
             if (!rota) return ctx.answerCbQuery('Pedido n\u00e3o encontrado ou j\u00e1 finalizado.');
             
-            userSessions[chatId] = { step: \"CHAT_CLIENTE\", data: { telefone_cliente: rota.pedido.telefone || rota.pedido.telefoneCliente || rota.pedido.whatsapp || rota.pedido.telefone_cliente, nome_cliente: rota.pedido.nomeCliente } };
+            userSessions[chatId] = { step: "CHAT_CLIENTE", data: { telefone_cliente: rota.pedido.telefone || rota.pedido.telefoneCliente || rota.pedido.whatsapp || rota.pedido.telefone_cliente, nome_cliente: rota.pedido.nomeCliente } };
             
             await ctx.editMessageText(`Aberta linha direta com *${rota.pedido.nomeCliente.split(' ')[0]}*.\\
 \\
@@ -287,12 +287,10 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
             broadcastLog('NUVEM', `Motoboy aceitou chamado Nuvem para pacote ${pacoteId}.`, { pacoteId });
 
             try {
-                await ctx.editMessageText((ctx.callbackQuery.message?.text ?? '') + '\\
-\\
-\u2705 *ACEITO!*', { parse_mode: 'Markdown' });
+                await ctx.editMessageText((ctx.callbackQuery.message?.text ?? '') + '\n\n\u2705 *ACEITO!*', { parse_mode: 'Markdown' });
                 await ctx.reply(`Voc\u00ea aceitou a rota Nuvem. \u2601\ufe0f\ud83d\udef5\\
 \\
-\ud83d\udccd **\u00daLTIMO PASSO:** Precisamos do seu GPS para rastrear sua chegada. Toque no \u00edcone de clipe (\ud83d\udcce), escolha \"Localiza\u00e7\u00e3o\" e envie sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para avisar o cliente e liberar os detalhes da entrega.`, Markup.removeKeyboard());
+\ud83d\udccd **\u00daLTIMO PASSO:** Precisamos do seu GPS para rastrear sua chegada. Toque no \u00edcone de clipe (\ud83d\udcce), escolha "Localiza\u00e7\u00e3o" e envie sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para avisar o cliente e liberar os detalhes da entrega.`, Markup.removeKeyboard());
             } catch (_e) {}
         });
 
@@ -333,9 +331,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
             const motoboyDb = await getMotoboyByTelegramId(ctx.from.id.toString());
             const nomeMotoboyAceite = motoboyDb?.nome?.split(' ')[0] || 'Um parceiro';
             broadcastLog('ACEITE_ROTA', `${nomeMotoboyAceite} confirmou a rota!`, { pacoteId });
-            await ctx.editMessageText(ctx.callbackQuery.message?.text + '\\
-\\
-\u2705 *ROTA ACEITA!* Pode iniciar o deslocamento.', { parse_mode: 'Markdown', disable_web_page_preview: true });
+            await ctx.editMessageText(ctx.callbackQuery.message?.text + '\n\n\u2705 *ROTA ACEITA!* Pode iniciar o deslocamento.', { parse_mode: 'Markdown', disable_web_page_preview: true });
             await ctx.answerCbQuery('Rota Aceita!');
 
             const pacotesRaw = await getPacotes();
@@ -367,9 +363,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                     }
                 }
 
-                let detalheMsg = '\ud83d\udcdd *DETALHES DA ROTA:*\\
-\\
-';
+                let detalheMsg = '\ud83d\udcdd *DETALHES DA ROTA:*\n\n';
                 let index = 0;
                 for (const pId of pacote.pedidosIds || []) {
                     const p = pedidos.find((ped: any) => ped.id === pId);
@@ -495,9 +489,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                                 }
                             }
 
-                            let detalheMsg = '\ud83d\udcdd *DETALHES DA ROTA:*\\
-\\
-';
+                            let detalheMsg = '\ud83d\udcdd *DETALHES DA ROTA:*\n\n';
                             let index = 0;
                             for (const pId of pacote.pedidosIds || []) {
                                 const p = pedidos.find((ped: any) => ped.id === pId);
@@ -537,9 +529,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                 if (ctx.message.location.live_period) {
                     await upsertFleet({ telegram_id: chatId.toString(), latitude, longitude, status: 'ONLINE' });
                     broadcastLog('FROTA', `Motoboy [${motoboy?.nome?.split(' ')[0] || 'Parceiro'}] bateu o ponto e est\u00e1 ONLINE \ud83d\udfe2`);
-                    await ctx.reply('\ud83d\udfe2 Ponto registrado! Voc\u00ea est\u00e1 ONLINE no radar da loja.\\
-\\
-Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u00e7\u00e3o ou digite /offline)', defaultKeyboard);
+                    await ctx.reply('\ud83d\udfe2 Ponto registrado! Voc\u00ea est\u00e1 ONLINE no radar da loja.\n\nFique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u00e7\u00e3o ou digite /offline)', defaultKeyboard);
                 } else {
                     await ctx.reply('\u26a0\ufe0f Aten\u00e7\u00e3o: voc\u00ea enviou uma localiza\u00e7\u00e3o fixa. Voc\u00ea precisa compartilhar a **Localiza\u00e7\u00e3o em Tempo Real**.');
                 }
@@ -625,7 +615,7 @@ Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u0
                 
                 if (session?.step === 'SOS_CHAT') {
                     if (!await checarCadastro(chatId.toString(), ctx)) return;
-                    broadcastLog(\"SOS_MSG\", text, { telegram_id: chatId.toString() });
+                    broadcastLog("SOS_MSG", text, { telegram_id: chatId.toString() });
                     return;
                 }
 
@@ -635,27 +625,27 @@ Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u0
                     const nomeMotoboySender = motoboyChat?.nome?.split(' ')[0] || 'Parceiro';
                     if (num) {
                         try {
-                            const sentMessage = await ctx.reply(\"Processando e reescrevendo para o cliente...\");
+                            const sentMessage = await ctx.reply("Processando e reescrevendo para o cliente...");
                             const textoProfissional = await traduzirMotoboyParaCliente(text);
                         
                             if (textoProfissional.trim().toUpperCase().includes('IGNORAR')) {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, \"Sinal recebido (IA optou por n\u00e3o incomodar o cliente).\");
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "Sinal recebido (IA optou por n\u00e3o incomodar o cliente).");
                                 return;
                             }
                         
                             const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional, ctx.chat.id.toString(), text, nomeMotoboySender);
                             
                             if (jidCliente) {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, \"\u2705 Mensagem enviada ao cliente!\");
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "\u2705 Mensagem enviada ao cliente!");
                             } else {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, \"\u274c Falha ao enviar. Verifique a conex\u00e3o do WhatsApp.\");
+                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "\u274c Falha ao enviar. Verifique a conex\u00e3o do WhatsApp.");
                             }
                         } catch (e) {
-                            console.error(\"[DEBUG WHATSAPP] Erro CR\u00cdTICO na API ou IA:\", e);
-                            await ctx.reply(\"\u274c Falha ao enviar a mensagem. Verifique a conex\u00e3o.\");
+                            console.error("[DEBUG WHATSAPP] Erro CR\u00cdTICO na API ou IA:", e);
+                            await ctx.reply("\u274c Falha ao enviar a mensagem. Verifique a conex\u00e3o.");
                         }
                     } else {
-                        await ctx.reply(\"\u274c Erro: Cliente sem n\u00famero de telefone para esta rota.\");
+                        await ctx.reply("\u274c Erro: Cliente sem n\u00famero de telefone para esta rota.");
                     }
                     return;
                 }
@@ -679,7 +669,7 @@ Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u0
                             }
                         };
                         if (restoredStep === 'VINCULO' && text !== 'Fixo' && text !== 'Freelancer') {
-                            await ctx.reply('Qual o seu **V\u00ednculo** com a loja? (Como \"Freelancer\", voc\u00ea tamb\u00e9m poder\u00e1 receber chamados de outras lojas da rede no futuro).', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
+                            await ctx.reply('Qual o seu **V\u00ednculo** com a loja? (Como "Freelancer", voc\u00ea tamb\u00e9m poder\u00e1 receber chamados de outras lojas da rede no futuro).', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
                             return;
                         }
                     } else {
@@ -705,13 +695,13 @@ Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u0
                         }
                         try {
                             await updateProgress(chatId, 'whatsapp', numeroWpp, 'VINCULO');
-                            await ctx.reply('Qual o seu **V\u00ednculo** com a loja? (Como \"Freelancer\", voc\u00ea tamb\u00e9m poder\u00e1 receber chamados de outras lojas da rede no futuro).', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
+                            await ctx.reply('Qual o seu **V\u00ednculo** com a loja? (Como "Freelancer", voc\u00ea tamb\u00e9m poder\u00e1 receber chamados de outras lojas da rede no futuro).', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
                         } catch (e) { await ctx.reply('\u274c Falha ao salvar no banco. Tente digitar novamente.'); }
                         break;
                     }
                     case 'VINCULO':
                         if (text !== 'Fixo' && text !== 'Freelancer') {
-                            return ctx.reply('Por favor, selecione \"Fixo\" ou \"Freelancer\".', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
+                            return ctx.reply('Por favor, selecione "Fixo" ou "Freelancer".', Markup.keyboard([['Fixo', 'Freelancer']]).oneTime().resize());
                         }
                         try {
                             await updateProgress(chatId, 'vinculo', text, 'PIX');
@@ -749,12 +739,8 @@ Fique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u0
                         const isFreelancer = activeSession.data.vinculo === 'Freelancer';
                         
                         const msgFinal = isFreelancer 
-                            ? '\u2705 Cadastro conclu\u00eddo e sincronizado com a rede!\\
-\\
-Compartilhe sua **Localiza\u00e7\u00e3o em Tempo Real** aqui neste chat para entrar no radar e come\u00e7ar a receber rotas.'
-                            : '\u2705 Cadastro conclu\u00eddo com sucesso!\\
-\\
-Compartilhe sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para entrar no radar da loja e come\u00e7ar a receber rotas.';
+                            ? '\u2705 Cadastro conclu\u00eddo e sincronizado com a rede!\n\nCompartilhe sua **Localiza\u00e7\u00e3o em Tempo Real** aqui neste chat para entrar no radar e come\u00e7ar a receber rotas.'
+                            : '\u2705 Cadastro conclu\u00eddo com sucesso!\n\nCompartilhe sua **Localiza\u00e7\u00e3o em Tempo Real** aqui no chat para entrar no radar da loja e come\u00e7ar a receber rotas.';
 
                         const payloadNuvem = isFreelancer ? {
                             telegram_id: chatId.toString(),

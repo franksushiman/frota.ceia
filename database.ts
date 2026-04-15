@@ -1,12 +1,9 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dbPath = path.join(__dirname, 'database.sqlite');
+const dbPath = process.env.DB_PATH || path.join(process.cwd(), 'database.sqlite');
 
 export let db: Database | null = null;
 let dbPromise: Promise<Database> | null = null;
@@ -40,7 +37,7 @@ export async function initDatabase(): Promise<Database> {
         await database.run('DELETE FROM configuracoes WHERE id != 1');
         const check = await database.get('SELECT id FROM configuracoes WHERE id = 1');
         if (!check) {
-            await database.run('INSERT INTO configuracoes (id, nome) VALUES (1, \"Minha Base Ceia\")');
+            await database.run("INSERT INTO configuracoes (id, nome) VALUES (1, 'Minha Base Ceia')");
         }
 
         await database.exec(`
@@ -149,7 +146,7 @@ export async function updateConfiguracoes(dados: any) {
 
     const check = await database.get('SELECT id FROM configuracoes WHERE id = 1');
     if (!check) {
-        await database.run('INSERT INTO configuracoes (id, nome) VALUES (1, \"Minha Base Ceia\")');
+        await database.run("INSERT INTO configuracoes (id, nome) VALUES (1, 'Minha Base Ceia')");
     }
 
     // Todos os campos usam COALESCE(?, col) para que chamadas parciais
@@ -305,7 +302,7 @@ export async function registrarEntrega(telegram_id: string, valor_entrega: numbe
 export async function getExtratoFinanceiro(telegram_id: string) {
     const database = await initDatabase();
 
-    const entregas = await database.all('SELECT * FROM entregas WHERE telegram_id = ? AND status = \"PENDENTE\"', [telegram_id]);
+    const entregas = await database.all("SELECT * FROM entregas WHERE telegram_id = ? AND status = 'PENDENTE'", [telegram_id]);
 
     let total_entregas = 0;
     let total_deslocamento = 0;
@@ -325,7 +322,7 @@ export async function getExtratoFinanceiro(telegram_id: string) {
 
 export async function zerarAcertoFinanceiro(telegram_id: string) {
     const database = await initDatabase();
-    await database.run('UPDATE entregas SET status = \"PAGO\" WHERE telegram_id = ? AND status = \"PENDENTE\"', [telegram_id]);
+    await database.run("UPDATE entregas SET status = 'PAGO' WHERE telegram_id = ? AND status = 'PENDENTE'", [telegram_id]);
 }
 
 export async function inserirHistoricoMotoboy(telegram_id: string, tipo: string, valor: number, descricao: string) {

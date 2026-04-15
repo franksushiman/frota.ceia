@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>CEIA - Gestão de Frota</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <style>
+        :root { --bg-color: #f8fafc; --sidebar-bg: #0f172a; --card-bg: #ffffff; --text-dark: #0f172a; --text-light: #64748b; --accent: #00d0b7; --accent-hover: #00b39e; --border: #e2e8f0; --font-main: 'Poppins', sans-serif; --font-mono: 'Roboto Mono', monospace; }
+        body { margin: 0; font-family: var(--font-main); display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-dark); overflow: hidden; }
+        .sidebar { width: 260px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; padding: 20px 0; z-index: 10; box-shadow: 2px 0 10px rgba(0,0,0,0.05); }
+        .logo-container { font-size: 2.2rem; font-weight: 700; padding: 0 24px 30px; border-bottom: 1px solid #1e293b; margin-bottom: 20px; letter-spacing: -1px; }
+        .logo-dot { color: var(--accent); }
+        .nav-item { padding: 14px 24px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s ease; border-right: 3px solid transparent; font-weight: 500; font-size: 0.95rem; }
+        .nav-item:hover { color: white; background-color: rgba(255,255,255,0.03); }
+        .nav-item.active { background-color: rgba(0, 208, 183, 0.08); color: var(--accent); border-right-color: var(--accent); }
+
+        .floating-pdv { margin: 0 20px 20px; background: rgba(0, 208, 183, 0.1); border: 1px solid var(--accent); border-radius: 8px; padding: 15px; text-align: center; text-decoration: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; transition: 0.2s; display: block; }
+        .floating-pdv:hover { background: var(--accent); color: white; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0, 208, 183, 0.2); }
+
+        .main-content { flex: 1; position: relative; display: flex; flex-direction: column; height: 100%;}
+        .tab-content { display: none; padding: 40px; overflow-y: auto; height: 100%; box-sizing: border-box; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+        .header-title { font-size: 1.8rem; font-weight: 600; margin-top: 0; margin-bottom: 30px; letter-spacing: -0.5px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border); margin-bottom: 24px; max-width: 600px; }
+
+        .map-section { position: relative; display: flex; flex-grow: 1; height: calc(100vh - 140px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #e2e8f0; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); justify-content: center; align-items: center; }
+        #map { flex: 1; height: 100%; width: 100%; display: none; }
+        .map-overlay-panel { position: absolute; top: 15px; left: 15px; z-index: 5; display: flex; flex-direction: column; gap: 10px; width: 320px; max-height: calc(100% - 30px); }
+
+        .zones-list-container { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex: 1; min-height: 0; overflow-y: auto; display: none; padding: 10px; }
+        .zone-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: #f8fafc; }
+        .zone-color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+
+        .drawing-tools { display: flex; gap: 8px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); justify-content: space-between; }
+        .drawing-btn { flex: 1; padding: 8px; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; background: #f8fafc; cursor: pointer; transition: 0.2s; color: var(--text-dark); }
+        .drawing-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .drawing-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        .form-group { margin-bottom: 18px; text-align: left; position: relative; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-light); margin-bottom: 6px; }
+        .helper-link { position: absolute; top: 0; right: 0; font-size: 0.75rem; color: #3b82f6; text-decoration: none; font-weight: 600; }
+        .helper-link:hover { text-decoration: underline; }
+        .btn-help-api { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: white; font-size: 0.65rem; font-weight: 700; border: none; cursor: pointer; margin-left: 6px; vertical-align: middle; line-height: 1; flex-shrink: 0; transition: 0.2s; }
+        .btn-help-api:hover { background: var(--accent-hover); transform: scale(1.1); }
+        .manifesto-box { font-size: 0.9rem; color: var(--text-dark); line-height: 1.7; }
+        .manifesto-box p { margin: 0; }
+        .form-control { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-family: var(--font-main); font-size: 0.95rem; outline: none; transition: 0.2s; }
+        .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 208, 183, 0.15); }
+
+        .schedule-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+        .schedule-row:last-child { border-bottom: none; }
+        .schedule-label { font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 8px; width: 120px;}
+        .schedule-inputs { display: flex; align-items: center; gap: 10px; }
+        .schedule-inputs input[type="time"] { padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: var(--font-mono); outline: none; }
+
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(20px); }
+        .toggle-group { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding: 15px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; }
+
+        .btn { background-color: var(--accent); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; width: 100%; transition: 0.2s ease; font-family: var(--font-main); }
+        .btn:hover { background-color: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0, 208, 183, 0.2); }
+
+        .btn-action { flex: 1; padding: 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; text-align: center; }
+        .btn-loc { background-color: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
+        .btn-edit { background-color: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+        .btn-del { background-color: #fef2f2; color: #ef4444; border-color: #fee2e2; }
+        .btn-pay { background-color: #ecfdf5; color: #10b981; border-color: #a7f3d0; }
+        .btn-history { background-color: #f3f4f6; color: #374151; border-color: #d1d5db; }
+        .btn-mostrar-chave { padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: var(--text-light); font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: 0.2s; font-family: var(--font-main); }
+        .btn-mostrar-chave:hover { background: #e2e8f0; color: var(--text-dark); }
+        .field-error { font-size: 0.78rem; color: #b91c1c; margin-top: 5px; display: none; }
+        .form-control.is-invalid { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+
+        .dispatch-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; height: calc(100vh - 150px); }
+        .dispatch-column { background: #f1f5f9; border-radius: 12px; padding: 15px; height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 2px solid transparent; transition: 0.2s; }
+        .column-header { font-size: 1rem; font-weight: 700; padding: 0 5px 12px; border-bottom: 2px solid #e2e8f0; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .column-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-bottom: 20px; min-height: 150px; }
+
+        .kanban-card { background: white; padding: 12px; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 2px 4px rgba(0,0,0,0.05); cursor: grab; position: relative; border-left: 5px solid #cbd5e1; transition: opacity 0.2s; }
+        .kanban-card:active { cursor: grabbing; }
+        .kanban-card.dragging { opacity: 0.4; border: 2px dashed var(--accent); }
+        .kanban-card .card-info { font-size: 0.85rem; color: var(--text-dark); margin-bottom: 4px; font-weight: 600; padding-right: 20px;}
+        .kanban-card .card-sub { font-size: 0.75rem; color: var(--text-light); }
+        .kanban-card .card-price { position: absolute; top: 12px; right: 12px; font-family: var(--font-mono); font-weight: 700; color: var(--accent); font-size: 0.85rem; }
+        .btn-remove-card { position: absolute; bottom: 8px; right: 8px; color: #ef4444; background: none; border: none; cursor: pointer; font-size: 1rem; font-weight: bold;}
+
+        .package-container { background: #fff; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 12px; min-height: 80px; display: flex; flex-direction: column; gap: 8px; position: relative; transition: 0.2s; }
+        .package-header { font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .package-item { background: #f8fafc; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
+        .package-drop-zone { min-height: 50px; border-radius: 8px; transition: 0.2s; }
+
+        .drop-zone-active { background-color: rgba(0, 208, 183, 0.1) !important; border-color: var(--accent) !important; }
+
+        .btn-create { background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+        .btn-create:hover { background: var(--accent-hover); }
+
+        .fleet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 20px; align-items: start; }
+        .fleet-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); transition: 0.2s; }
+        .fleet-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; }
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+        .status-offline { background: #f1f5f9; color: #64748b; }
+        .status-online { background: #ecfdf5; color: #10b981; }
+        .status-em_entrega { background: #eff6ff; color: #3b82f6; }
+        .invite-panel { display: flex; gap: 10px; align-items: center; background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border); }
+
+        .toast { background-color: #dcfce7; color: #166534; padding: 16px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); font-weight: 500; opacity: 0; transform: translateX(100%); transition: all 0.3s ease; }
+        .toast.error { background-color: #fecaca; color: #b91c1c; }
+        .toast.show { opacity: 1; transform: translateX(0); }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.6); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-card { position: relative; background: white; padding: 28px; border-radius: 16px; width: 400px; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid var(--border); }
+        .modal-close-icon { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; color: #94a3b8; cursor: pointer; border: none; background: transparent; transition: 0.2s; }
+        .modal-close-icon:hover { color: #ef4444; }
+
+        .pac-container { z-index: 10000 !important; }
+
+        /* Login/Setup overlay */
+        #login-overlay { position: fixed; inset: 0; background: var(--sidebar-bg); z-index: 999999; display: flex; justify-content: center; align-items: center; }
+        .login-card { background: white; border-radius: 16px; padding: 40px; width: 400px; max-width: 92vw; box-shadow: 0 25px 50px rgba(0,0,0,0.4); }
+        .login-logo { font-size: 2rem; font-weight: 700; margin-bottom: 6px; letter-spacing: -1px; }
+        .login-screen { display: none; }
+        .login-screen.active { display: block; }
+        #login-error { background: #fef2f2; color: #b91c1c; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; display: none; border: 1px solid #fecaca; }
+        #btn-logout { position: fixed; bottom: 16px; left: 0; width: 260px; background: none; border: none; color: #64748b; font-size: 0.8rem; cursor: pointer; padding: 10px; text-align: center; font-family: var(--font-main); transition: color 0.2s; }
+        #btn-logout:hover { color: #ef4444; }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div class="login-card">
+            <div class="login-logo">frota<span class="logo-dot">.</span>ceia</div>
+            <p id="login-subtitle" style="color: var(--text-light); font-size: 0.88rem; margin-bottom: 28px; margin-top: 4px;">Painel de Controle</p>
+            <div id="login-error"></div>
+
+            <div id="screen-login" class="login-screen active">
+                <div class="form-group">
+                    <label>WhatsApp</label>
+                    <input type="text" id="login-whatsapp" class="form-control" placeholder="5511999990000" inputmode="tel" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Senha</label>
+                    <input type="password" id="login-senha" class="form-control" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin(this)">
+                </div>
+                <button class="btn" onclick="doLogin(this)">Entrar</button>
+            </div>
+
+            <div id="screen-setup" class="login-screen">
+                <p style="font-size: 0.83rem; color: var(--text-light); background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; margin-bottom: 20px;">Nenhum usuário encontrado. Crie a conta de administrador para começar.</p>
+                <div class="form-group">
+                    <label>WhatsApp (será seu login)</label>
+                    <input type="text" id="setup-whatsapp" class="form-control" placeholder="5511999990000" inputmode="tel" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Senha</label>
+                    <input type="password" id="setup-senha" class="form-control" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Senha</label>
+                    <input type="password" id="setup-senha-confirm" class="form-control" autocomplete="new-password">
+                </div>
+                <button class="btn" onclick="doSetup(this)">Criar conta e entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sos-banner" onclick="abrirModalSOS()" style="position: fixed; top: 0; left: 0; width: 100%; background: #ef4444; color: white; text-align: center; padding: 15px; font-weight: bold; z-index: 10000; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; transition: 0.2s;">
+        ⚠️ <span id="sos-text"></span> (Clique para abrir o Chat)
+    </div>
+
+    <div id="sac-banner" onclick="abrirModalSAC()" style="position: fixed; top: 0; left: 0; width: 100%; background: #06b6d4; color: white; text-align: center; padding: 15px; font-weight: bold; z-index: 9999; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; transition: 0.2s;">
+        💬 <span id="sac-text"></span> (Clique para atender)
+    </div>
+
+    <audio id="beep-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+
+    <div class="sidebar">
+        <div class="logo-container">frota<span class="logo-dot">.</span>ceia</div>
+        <div class="nav-item active" onclick="switchTab('tab-operacional', this)">⚡ Despacho</div>
+        <div class="nav-item" onclick="switchTab('tab-frota', this)">🛵 Minha Frota</div>
+        <div class="nav-item" onclick="switchTab('tab-mapa', this)">🗺️ Mapa de Taxas</div>
+<div class="nav-item" onclick="switchTab('tab-perfil', this)">🏠 QG Logístico</div>
+
+        <a href="https://ceia.ia.br" target="_blank" class="floating-pdv">Baixar o Ceia PDV</a>
+        <button id="btn-logout" onclick="logout()">Sair da conta</button>
+    </div>
+
+    <div class="main-content">
+        <div id="tab-operacional" class="tab-content active">
+            <h1 class="header-title">Fluxo de Entregas</h1>
+            <div class="dispatch-board">
+                <div class="dispatch-column" ondragover="allowDrop(event)" ondrop="dropToCol1(event)" id="col-1-zone">
+                    <div class="column-header">
+                        1. PREPARAÇÃO
+                        <button class="btn-create" onclick="abrirModalNovoPedido()">+ Pedido</button>
+                    </div>
+                    <div id="coluna-preparacao" class="column-body"></div>
+                </div>
+
+                <div class="dispatch-column">
+                    <div class="column-header">
+                        2. AGUARDANDO COLETA
+                        <button class="btn-create" onclick="criarPacote()">+ Pacote</button>
+                    </div>
+                    <div id="coluna-aguardando-coleta" class="column-body"></div>
+                </div>
+
+                <div class="dispatch-column">
+                    <div class="column-header">3. EM ROTA</div>
+                    <div id="coluna-em-rota" class="column-body"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-frota" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <h1 class="header-title" style="margin: 0;">Gestão da Frota</h1>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn" style="margin: 0; width: auto; padding: 12px 20px; background: #7c3aed;" onclick="abrirHistoricoParceiros()">☁️ Histórico Parceiros</button>
+                    <button id="btn-disparar" class="btn" style="margin: 0; width: auto; padding: 12px 24px;" onclick="dispararConvite()">📱 QR de Cadastro</button>
+                </div>
+            </div>
+            <div id="fleet-container" class="fleet-grid"></div>
+        </div>
+
+        <div id="tab-mapa" class="tab-content">
+            <h1 class="header-title">Mapa de Taxas de Entrega</h1>
+            <div class="map-section">
+                <div id="map-warning" style="color: var(--text-light); font-weight: 500;">O mapa será carregado após inserir a Chave do Google Maps no QG Logístico.</div>
+                <div id="map"></div>
+
+                <div class="map-overlay-panel" id="map-tools" style="display: none;">
+                    <div class="zones-list-container" id="zones-list-container">
+                        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 10px; color: var(--text-dark);">Zonas Cadastradas</div>
+                        <div id="zones-list-content"></div>
+                    </div>
+                    <div class="drawing-tools">
+                        <button class="drawing-btn" id="btn-draw-poly" onclick="setDrawingMode('polygon')">⬟ Polígono</button>
+                        <button class="drawing-btn" id="btn-draw-circle" onclick="setDrawingMode('circle')">⭕ Círculo</button>
+                        <button class="drawing-btn" id="btn-draw-hand" onclick="setDrawingMode('hand')" style="background: var(--accent); color: white;">✋ Mover</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-perfil" class="tab-content">
+            <h1 class="header-title">QG Logístico</h1>
+            <div class="card">
+                <div class="form-group"><label>Nome do Ponto de Coleta (Restaurante)</label><input type="text" id="prof-nome" class="form-control"></div>
+
+                <div class="form-group">
+                    <label>CPF / CNPJ</label>
+                    <input type="text" id="prof-documento" class="form-control" placeholder="000.000.000-00 ou 00.000.000/0000-00" oninput="mascararDocumento(this)" inputmode="numeric" maxlength="18">
+                    <span id="erro-documento" class="field-error">CPF ou CNPJ inválido.</span>
+                </div>
+
+                <div class="form-group"><label>Endereço Base (Ponto de Partida)</label><input type="text" id="prof-endereco" class="form-control" placeholder="Ex: Rua das Flores, 123, São Paulo, SP"></div>
+
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 24px 0;">
+                <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--text-dark);">Horário de Funcionamento</h3>
+                <p style="font-size: 0.8rem; color: var(--text-light); margin-bottom: 15px;">Fora deste horário, o sistema convoca parceiros NUVEM automaticamente.</p>
+
+                <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-seg"> Segunda</label><div class="schedule-inputs"><input type="time" id="hora-seg-abre"> <span>às</span> <input type="time" id="hora-seg-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-ter"> Terça</label><div class="schedule-inputs"><input type="time" id="hora-ter-abre"> <span>às</span> <input type="time" id="hora-ter-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-qua"> Quarta</label><div class="schedule-inputs"><input type="time" id="hora-qua-abre"> <span>às</span> <input type="time" id="hora-qua-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-qui"> Quinta</label><div class="schedule-inputs"><input type="time" id="hora-qui-abre"> <span>às</span> <input type="time" id="hora-qui-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-sex"> Sexta</label><div class="schedule-inputs"><input type="time" id="hora-sex-abre"> <span>às</span> <input type="time" id="hora-sex-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-sab"> Sábado</label><div class="schedule-inputs"><input type="time" id="hora-sab-abre"> <span>às</span> <input type="time" id="hora-sab-fecha"></div></div>
+                    <div class="schedule-row"><label class="schedule-label"><input type="checkbox" id="dia-dom"> Domingo</label><div class="schedule-inputs"><input type="time" id="hora-dom-abre"> <span>às</span> <input type="time" id="hora-dom-fecha"></div></div>
+                </div>
+
+                <div class="toggle-group">
+                    <label class="switch"><input type="checkbox" id="prof-whatsapp-ativo" checked><span class="slider"></span></label>
+                    <div>
+                        <span style="font-weight: 600; font-size: 0.9rem; color: var(--text-dark);">Atendimento ao Cliente (WhatsApp)</span>
+                        <div id="killswitch-aviso" style="display:none; font-size: 0.78rem; color: #b45309; margin-top: 3px; background: #fef3c7; padding: 4px 8px; border-radius: 4px;">O robô ignorará mensagens de clientes. O sistema focará 100% no despacho via Telegram.</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 15px;">
+                    <div class="form-group" style="flex: 1;"><label>WhatsApp Oficial</label><input type="text" id="prof-whatsapp" class="form-control" placeholder="55..."></div>
+                    <div class="form-group" style="flex: 2;"><label>Link do Cardápio (Para Atendimento IA)</label><input type="text" id="prof-link-cardapio" class="form-control" placeholder="Ex: https://meucardapio.com"></div>
+                </div>
+                 <div class="form-group">
+                    <label>Telegram Bot Token <button type="button" class="btn-help-api" onclick="abrirModalApi('telegram')">?</button></label>
+                    <a href="https://t.me/BotFather" target="_blank" class="helper-link" style="right: 30px;">Pegar no @BotFather</a>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="password" id="prof-telegram-token" class="form-control" style="flex: 1;">
+                        <button type="button" id="btn-mostrar-prof-telegram-token" class="btn-mostrar-chave" onclick="mostrarChave('prof-telegram-token')" style="display:none;">👁 Mostrar</button>
+                    </div>
+                </div>
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 24px 0;">
+                <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--text-dark);">Motores e APIs (Seu Custo de Fábrica)</h3>
+                <p style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 20px; line-height: 1.5;">
+                  <b>O Fim do Pedágio Tecnológico 🏴‍☠️</b><br>
+                  Plataformas tradicionais alugam as ferramentas do Google, OpenAI e Meta e te cobram mensalidades absurdas. Aqui, você conecta suas próprias chaves direto na fonte. Sem intermediários, sem revenda de tecnologia, operando no puro preço de custo. A operação é 100% sua e blindada.
+                </p>
+
+                <div class="form-group">
+                    <label>Google Maps API Key (Habilita o Mapa e o Autocomplete) <button type="button" class="btn-help-api" onclick="abrirModalApi('google')">?</button></label>
+                    <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" class="helper-link" style="right: 30px;">Criar Chave Google</a>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="password" id="prof-google-maps-key" class="form-control" style="flex: 1;">
+                        <button type="button" id="btn-mostrar-prof-google-maps-key" class="btn-mostrar-chave" onclick="mostrarChave('prof-google-maps-key')" style="display:none;">👁 Mostrar</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>OpenAI API Key (Para Inteligência Artificial) <button type="button" class="btn-help-api" onclick="abrirModalApi('openai')">?</button></label>
+                    <a href="https://platform.openai.com/api-keys" target="_blank" class="helper-link" style="right: 30px;">Criar Chave OpenAI</a>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="password" id="prof-openai-key" class="form-control" style="flex: 1;">
+                        <button type="button" id="btn-mostrar-prof-openai-key" class="btn-mostrar-chave" onclick="mostrarChave('prof-openai-key')" style="display:none;">👁 Mostrar</button>
+                    </div>
+                </div>
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 24px 0;">
+                <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--text-dark);">Canal WhatsApp</h3>
+
+                <div id="section-baileys" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                    <strong style="font-size: 0.9rem; color: #15803d;">Conexão via QR Code (Baileys)</strong>
+                    <p style="font-size: 0.82rem; color: #6b7280; margin: 8px 0 15px;">Tecnologia comunitária. Recomendamos usar um número secundário dedicado ao robô.</p>
+                    <button type="button" id="btn-conectar-whatsapp" onclick="abrirAlertaBanimento()" style="background: #25D366; color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; transition: 0.2s;">Conectar WhatsApp</button>
+                </div>
+
+                <button id="btn-salvar-perfil" class="btn" style="margin-top: 16px;" onclick="salvarPerfil()">Gravar Base</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-top:0; font-size:1.1rem; color:var(--text-dark);">Alterar Senha do Painel</h3>
+                <div class="form-group"><label>Senha Atual</label><input type="password" id="senha-atual" class="form-control" placeholder="••••••••" autocomplete="current-password"></div>
+                <div class="form-group"><label>Nova Senha</label><input type="password" id="senha-nova" class="form-control" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+                <div class="form-group"><label>Confirmar Nova Senha</label><input type="password" id="senha-nova-confirm" class="form-control" autocomplete="new-password"></div>
+                <button class="btn" onclick="alterarSenha(this)">Alterar Senha</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-novo-pedido" class="modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close-icon" onclick="fecharModal('modal-novo-pedido')">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark);">Novo Pedido</h3>
+
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex: 2;">
+                    <label>Nome do Cliente</label>
+                    <input type="text" id="pedido-nome" class="form-control" placeholder="Ex: João da Silva" autofocus>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>WhatsApp / Telefone</label>
+                    <input type="text" id="pedido-telefone" class="form-control" placeholder="Ex: 11999999999">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Endereço de Entrega (Google Autocomplete)</label>
+                <input type="text" id="pedido-endereco" class="form-control" placeholder="Rua, Número, Bairro, Cidade">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Número</label>
+                    <input type="text" id="pedido-numero" class="form-control" placeholder="Ex: 123">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Apartamento</label>
+                    <input type="text" id="pedido-apartamento" class="form-control" placeholder="Ex: Ap 42">
+                </div>
+                <div class="form-group" style="flex: 2;">
+                    <label>Complemento</label>
+                    <input type="text" id="pedido-complemento" class="form-control" placeholder="Ex: Bloco B, fundos, casa 2">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Observações</label>
+                <input type="text" id="pedido-observacoes" class="form-control" placeholder="Ex: Ligar ao chegar, portão azul">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Nº Pedido iFood (Opcional)</label>
+                    <input type="text" id="pedido-ifood" class="form-control" placeholder="Ex: #4321">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Forma de Pagamento</label>
+                    <select id="pedido-pagamento" class="form-control">
+                        <option value="PIX">PIX</option>
+                        <option value="Cartão (Maquininha)">Cartão (Maquininha)</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                    </select>
+                </div>
+            </div>
+            <div id="feedback-taxa" style="font-size: 0.85rem; padding: 10px; border-radius: 8px; background: #f1f5f9; margin-bottom: 15px; display: none;"></div>
+            <div class="form-group" id="container-taxa-manual" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1;">
+                <label style="color: #0f172a; font-weight: 600;">Taxa de Entrega Manual (R$)</label>
+                <input type="number" id="pedido-taxa-manual" class="form-control" step="0.50" placeholder="Ex: 12.50">
+            </div>
+            <input type="hidden" id="pedido-edit-id">
+            <button id="btn-salvar-pedido" class="btn" onclick="salvarNovoPedido()">Confirmar e Adicionar</button>
+        </div>
+    </div>
+
+    <div id="modal-despacho" class="modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close-icon" onclick="fecharModal('modal-despacho')">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark);">Despachar Pacote</h3>
+            <p style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 20px;">Selecione um motoboy disponível para assumir esta entrega.</p>
+
+            <button class="btn-create" style="width: 100%; padding: 10px; font-size: 0.9rem; background: #8b5cf6; margin-bottom: 15px;" onclick="buscarNaNuvem()">☁️ Buscar Parceiro na Nuvem</button>
+            <div id="lista-nuvem-disponiveis" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
+            <hr style="border: 0; border-top: 1px solid var(--border); margin-bottom: 15px;">
+
+            <div id="lista-motoboys-disponiveis" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            <button class="btn" style="background:#6366f1; margin-top:8px;" onclick="gerarQRDespacho()">📱 Gerar QR Presencial</button>
+        </div>
+    </div>
+
+    <div id="modal-chat-sos" class="modal-overlay">
+        <div class="modal-card" style="width: 500px; display: flex; flex-direction: column; height: 70vh;">
+            <h3 style="margin-top:0; color:#ef4444; margin-bottom: 15px;">🚨 Central de Apoio (SOS)</h3>
+            <div id="chat-history-sos" style="flex: 1; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+                </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="chat-input-sos" class="form-control" placeholder="Digite a instrução para o motoboy..." style="flex: 1; margin-bottom: 0;">
+                <button class="btn" style="width: auto; padding: 0 20px;" onclick="enviarMensagemSOS()">Enviar</button>
+            </div>
+            <button class="btn btn-del" style="margin-top: 15px;" onclick="telegramIdSOSAtual = null; document.getElementById('chat-history-sos').innerHTML = ''; fecharModal('modal-chat-sos');">Encerrar Conversa de Emergência</button>
+        </div>
+    </div>
+
+    <div id="modal-chat-sac" class="modal-overlay">
+        <div class="modal-card" style="width: 500px; display: flex; flex-direction: column; height: 70vh;">
+            <h3 style="margin-top:0; color:#06b6d4; margin-bottom: 15px;">💬 Atendimento ao Cliente</h3>
+            <div id="chat-history-sac" style="flex: 1; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+                </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="chat-input-sac" class="form-control" placeholder="Digite a resposta para o cliente..." style="flex: 1; margin-bottom: 0;">
+                <button class="btn" style="width: auto; padding: 0 20px;" onclick="enviarMensagemSAC()">Enviar</button>
+            </div>
+            <button class="btn btn-edit" style="margin-top: 15px;" onclick="encerrarAtendimentoSAC()">Encerrar Atendimento</button>
+        </div>
+    </div>
+
+    <div id="modal-edit" class="modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close-icon" onclick="fecharModal('modal-edit')">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark);">Editar Perfil</h3>
+            <input type="hidden" id="edit-id">
+            <div class="form-group"><label>Nome</label><input type="text" id="edit-nome" class="form-control" placeholder="Nome completo"></div>
+            <div class="form-group"><label>WhatsApp</label><input type="text" id="edit-whatsapp" class="form-control" placeholder="5511999..."></div>
+            <div class="form-group"><label>Chave PIX</label><input type="text" id="edit-pix" class="form-control" placeholder="CPF, e-mail, telefone ou chave aleatória"></div>
+            <div class="form-group"><label>Vínculo</label><select id="edit-vinculo" class="form-control"><option value="Fixo">Fixo</option><option value="Freelancer">Freelancer</option></select></div>
+            <div class="form-group"><label>Veículo</label><input type="text" id="edit-veiculo" class="form-control"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;"><button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-edit')">Cancelar</button><button class="btn" style="width: 50%;" onclick="salvarEdicao()">Salvar</button></div>
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0 16px;">
+            <button class="btn btn-del" style="border: none;" onclick="excluirMotoboy(document.getElementById('edit-id').value); fecharModal('modal-edit');">🗑️ Excluir Motoboy Definitivamente</button>
+        </div>
+    </div>
+
+    <div id="modal-nuvem-dados" class="modal-overlay">
+        <div class="modal-card">
+            <button class="modal-close-icon" onclick="fecharModal('modal-nuvem-dados')">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark);">Conferir Dados</h3>
+            <p style="margin: -10px 0 16px; font-size: 0.85rem; color: var(--text-light);">Nó de origem: <b id="nuvem-no-origem" style="color: #7c3aed;"></b></p>
+            <input type="hidden" id="nuvem-edit-id">
+            <div class="form-group"><label>Nome</label><input type="text" id="nuvem-edit-nome" class="form-control" readonly disabled></div>
+            <div class="form-group"><label>WhatsApp</label><input type="text" id="nuvem-edit-whatsapp" class="form-control" readonly disabled></div>
+            <div class="form-group"><label>Chave PIX</label><input type="text" id="nuvem-edit-pix" class="form-control" readonly disabled></div>
+            <div class="form-group"><label>Veículo</label><input type="text" id="nuvem-edit-veiculo" class="form-control" readonly disabled></div>
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0 16px;">
+            <div style="font-size: 0.88rem; line-height: 2; color: var(--text-dark);">
+                <div style="display: flex; justify-content: space-between;"><span>Taxa de entrega (zona)</span><span id="nuvem-taxa-entrega" style="font-family: var(--font-mono); font-weight: 600;">R$ 0,00</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>Taxa de deslocamento</span><span id="nuvem-taxa-deslocamento" style="font-family: var(--font-mono); font-weight: 600;">R$ 0,00</span></div>
+                <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; font-weight: 700;"><span>Total a pagar</span><span id="nuvem-total" style="font-family: var(--font-mono); color: #7c3aed;">R$ 0,00</span></div>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <canvas id="qr-nuvem"></canvas>
+                <p style="font-size: 0.78rem; color: var(--text-light); margin-top: 8px;">Chave PIX: <b id="nuvem-chave-pix-label"></b></p>
+            </div>
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0 16px;">
+            <button class="btn btn-del" style="border: none; width: 100%;" onclick="cancelarEntregaNuvem(document.getElementById('nuvem-edit-id').value)">✖ Cancelar Entrega</button>
+        </div>
+    </div>
+
+    <div id="modal-financeiro" class="modal-overlay">
+        <div class="modal-card" style="width: 450px; text-align: center;">
+            <button class="modal-close-icon" onclick="fecharModal('modal-financeiro')">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark);">Acerto: <span id="fin-nome" style="color: var(--accent);"></span></h3>
+            <input type="hidden" id="fin-id">
+            <div class="finance-panel">
+                <div class="finance-row"><span>Corridas Realizadas:</span> <strong id="fin-qtd">0</strong></div>
+                <div class="finance-row"><span>Taxas de Entrega:</span> <strong id="fin-entregas">R$ 0,00</strong></div>
+                <div class="finance-row"><span>Deslocamento (Nuvem):</span> <strong id="fin-deslocamento">R$ 0,00</strong></div>
+                <div class="finance-total"><span>Total a Pagar:</span> <strong id="fin-total" style="color: #10b981;">R$ 0,00</strong></div>
+            </div>
+            <div id="pix-container" style="display: none; flex-direction: column; align-items: center; margin-bottom: 20px;"><canvas id="qr-code-pix"></canvas><p style="font-size: 0.8rem; color: var(--text-light); margin-top: 10px;">Chave: <b id="fin-chave-pix"></b></p></div>
+            <div id="fin-empty-state" style="color: var(--text-light); margin-bottom: 20px; font-size: 0.9rem;">Nenhum valor pendente de pagamento.</div>
+            <div style="display: flex; gap: 10px;"><button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-financeiro')">Fechar</button><button id="btn-zerar-acerto" class="btn btn-pay" style="width: 50%; display: none;" onclick="zerarAcerto()">Liquidar e Zerar</button></div>
+        </div>
+    </div>
+
+    <div id="modal-zone" class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="margin-top:0; color:var(--text-dark);">Configurar Zona de Entrega</h3>
+            <p style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 20px;">Defina o nome da área e quanto o motoboy recebe.</p>
+            <div class="form-group"><label>Nome da Região</label><input type="text" id="zone-name" class="form-control"></div>
+            <div class="form-group"><label>Taxa de Entrega (R$)</label><input type="number" id="zone-fee" class="form-control" step="0.50"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;"><button class="btn btn-del" style="width: 50%;" onclick="cancelarCriacaoZona()">Descartar</button><button class="btn" style="width: 50%;" onclick="salvarCriacaoZona()">Salvar</button></div>
+        </div>
+    </div>
+
+    <div id="modal-tracking" class="modal-overlay">
+        <div class="modal-card" style="width: 80%; max-width: 800px; height: 80vh; display: flex; flex-direction: column;">
+            <button class="modal-close-icon" onclick="fecharModalRastreio()">✖</button>
+            <h3 style="margin-top:0; color:var(--text-dark); margin-bottom: 15px;">📍 Rastreio: <span id="track-nome" style="color: var(--accent);"></span></h3>
+            <div id="tracking-map-canvas" style="flex: 1; border-radius: 12px; border: 1px solid var(--border); background: #eee;"></div>
+            <div style="margin-top: 15px; display: flex; justify-content: flex-end;"><button class="btn btn-edit" style="width: auto; padding: 10px 30px;" onclick="fecharModalRastreio()">Fechar Radar</button></div>
+        </div>
+    </div>
+
+    <div id="modal-alerta-ban" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center;"><div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center;"><h3 style="color: #f59e0b; margin-top: 0;">ℹ️ Aviso: API Não Oficial</h3><p style="color: #334155; margin-bottom: 20px; font-size: 15px;">Esta conexão utiliza um método comunitário (Baileys). Por não ser oficial, está sujeita a instabilidades caso o WhatsApp atualize. Recomendamos o uso de um número secundário dedicado ao atendimento.</p><div style="display: flex; gap: 10px; justify-content: center;"><button type="button" onclick="fecharAlertaBanimento()" style="background: #f1f5f9; color: #475569; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 50%;">Cancelar</button><button type="button" onclick="confirmarApiNaoOficial()" style="background: #25D366; color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 50%;">Conectar</button></div></div></div>
+    <div id="modal-qr-whatsapp" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center;"><div style="background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center;"><h3 style="color: #0f172a; margin-top: 0; margin-bottom: 10px;">Conectar WhatsApp</h3><div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 20px; min-height: 230px; display: flex; justify-content: center; align-items: center;"><img id="qr-code-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=Aguardando_Sessao" alt="QR Code" style="max-width: 100%;"></div><button type="button" onclick="fecharModalQR()" style="background: #f1f5f9; color: #475569; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">Cancelar / Fechar</button></div></div>
+
+    <div id="modal-help-api" class="modal-overlay">
+        <div class="modal-card" style="max-width: 460px;">
+            <button class="modal-close-icon" onclick="fecharModal('modal-help-api')">✖</button>
+            <h3 id="modal-help-api-titulo" style="margin-top:0; color:var(--text-dark); padding-right: 30px;"></h3>
+            <div class="manifesto-box">
+                <p id="modal-help-api-texto"></p>
+            </div>
+            <button class="btn" style="margin-top: 24px;" onclick="fecharModal('modal-help-api')">Entendido!</button>
+        </div>
+    </div>
+
+    <div id="notification-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>
+
+    <div id="modal-historico" class="modal-overlay">
+        <div class="modal-card" style="width: 500px;">
+            <button class="modal-close-icon" onclick="fecharModal('modal-historico')">✖</button>
+            <h3 id="hist-titulo" style="margin-top:0; color:var(--text-dark); padding-right: 30px;"></h3>
+            <div id="hist-lista" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;"></div>
+            <button class="btn btn-edit" style="margin-top: 20px; border: none;" onclick="fecharModal('modal-historico')">Fechar</button>
+        </div>
+    </div>
+
+    <div id="modal-confirmacao" class="modal-overlay"><div class="modal-card" style="width: 350px; text-align: center;"><h3 style="margin-top:0; color:var(--text-dark);">Atenção</h3><p id="confirm-msg" style="color: var(--text-light); margin-bottom: 20px; font-size: 0.95rem;"></p><div style="display: flex; gap: 10px;"><button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-confirmacao')">Cancelar</button><button id="btn-confirm-action" class="btn btn-del" style="width: 50%; border: none;">Confirmar</button></div></div></div>
+
+    <div id="modal-motoboy-nuvem" class="modal-overlay">
+        <div class="modal-card" style="width: 420px;">
+            <button class="modal-close-icon" onclick="fecharModal('modal-motoboy-nuvem')">✖</button>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <h3 style="margin: 0; color: var(--text-dark);">Motoboy Parceiro</h3>
+                <span style="background: #7c3aed; color: white; font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.5px;">PARCEIRO NUVEM</span>
+            </div>
+            <div style="font-size: 0.88rem; color: var(--text-dark); line-height: 1.8; margin-bottom: 20px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px;">
+                <div>👤 <b>Nome:</b> <span id="nuvem-modal-nome">-</span></div>
+                <div>🏍️ <b>Veículo:</b> <span id="nuvem-modal-veiculo">-</span></div>
+                <div>📍 <b>Distância:</b> <span id="nuvem-modal-distancia">-</span></div>
+                <div>💸 <b>Taxa de Deslocamento:</b> <span id="nuvem-modal-taxa">-</span></div>
+                <div>🏪 <b>Nó de Origem:</b> <span id="nuvem-modal-no">-</span></div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-del" style="width: 50%; border: none;" onclick="cancelarEntregaNuvem()">Cancelar Entrega</button>
+                <button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-motoboy-nuvem')">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-historico-parceiros" class="modal-overlay">
+        <div class="modal-card" style="width: 520px;">
+            <button class="modal-close-icon" onclick="fecharModal('modal-historico-parceiros')">✖</button>
+            <h3 style="margin-top: 0; color: var(--text-dark);">☁️ Histórico de Parceiros Nuvem</h3>
+            <div id="lista-historico-parceiros" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;"></div>
+            <button class="btn btn-edit" style="margin-top: 20px; border: none;" onclick="fecharModal('modal-historico-parceiros')">Fechar</button>
+        </div>
+    </div>
+
+    <script>
+        // ===================== AUTH =====================
+        function showOverlay() { document.getElementById('login-overlay').style.display = 'flex'; }
+        function hideOverlay() { document.getElementById('login-overlay').style.display = 'none'; }
+        function showLoginError(msg) { const el = document.getElementById('login-error'); el.textContent = msg; el.style.display = 'block'; }
+        function clearLoginError() { document.getElementById('login-error').style.display = 'none'; }
+
+        function showLoginScreen() {
+            document.getElementById('screen-setup').classList.remove('active');
+            document.getElementById('screen-login').classList.add('active');
+            document.getElementById('login-subtitle').textContent = 'Painel de Controle';
+            showOverlay();
+        }
+
+        function showSetupScreen() {
+            document.getElementById('screen-login').classList.remove('active');
+            document.getElementById('screen-setup').classList.add('active');
+            document.getElementById('login-subtitle').textContent = 'Primeiro Acesso — Configure sua conta';
+            showOverlay();
+        }
+
+        async function doLogin(btn) {
+            const whatsapp = document.getElementById('login-whatsapp').value.trim();
+            const senha = document.getElementById('login-senha').value;
+            if (!whatsapp || !senha) return showLoginError('Preencha todos os campos.');
+            clearLoginError();
+            btn.disabled = true; btn.textContent = 'Entrando...';
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp, senha })
+                });
+                const data = await res.json();
+                if (!res.ok) return showLoginError(data.error || 'Credenciais inválidas.');
+                hideOverlay();
+                initApp();
+            } catch(e) {
+                showLoginError('Falha de conexão. Verifique se o servidor está rodando.');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Entrar';
+            }
+        }
+
+        async function doSetup(btn) {
+            const whatsapp = document.getElementById('setup-whatsapp').value.trim();
+            const senha = document.getElementById('setup-senha').value;
+            const confirm = document.getElementById('setup-senha-confirm').value;
+            if (!whatsapp || !senha) return showLoginError('WhatsApp e senha são obrigatórios.');
+            if (senha.length < 6) return showLoginError('A senha deve ter no mínimo 6 caracteres.');
+            if (senha !== confirm) return showLoginError('As senhas não coincidem.');
+            clearLoginError();
+            btn.disabled = true; btn.textContent = 'Criando conta...';
+            try {
+                const res = await fetch('/auth/setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp, senha })
+                });
+                const data = await res.json();
+                if (!res.ok) return showLoginError(data.error || 'Erro ao criar conta.');
+                hideOverlay();
+                initApp();
+            } catch(e) {
+                showLoginError('Falha de conexão.');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Criar conta e entrar';
+            }
+        }
+
+        async function alterarSenha(btn) {
+            const senha_atual = document.getElementById('senha-atual').value;
+            const nova_senha = document.getElementById('senha-nova').value;
+            const confirma = document.getElementById('senha-nova-confirm').value;
+            if (!senha_atual || !nova_senha) return showToast('Preencha todos os campos.', 'error');
+            if (nova_senha.length < 6) return showToast('A nova senha deve ter no mínimo 6 caracteres.', 'error');
+            if (nova_senha !== confirma) return showToast('As senhas não coincidem.', 'error');
+            btn.disabled = true; btn.textContent = 'Salvando...';
+            try {
+                const res = await fetch('/api/auth/alterar-senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ senha_atual, nova_senha })
+                });
+                const data = await res.json();
+                if (!res.ok) return showToast(data.error || 'Erro ao alterar senha.', 'error');
+                document.getElementById('senha-atual').value = '';
+                document.getElementById('senha-nova').value = '';
+                document.getElementById('senha-nova-confirm').value = '';
+                showToast('Senha alterada com sucesso!');
+            } catch(e) {
+                showToast('Falha de conexão.', 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Alterar Senha';
+            }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            location.reload();
+        }
+        // ===================== /AUTH =====================
+
+        let acaoConfirmacao = null;
+        function confirmarAcao(mensagem, callback) { document.getElementById('confirm-msg').innerText = mensagem; acaoConfirmacao = callback; document.getElementById('modal-confirmacao').style.display = 'flex'; }
+
+        let telegramIdSOSAtual = null;
+        let jidSACAtual = null;
+
+        function abrirModalSOS() {
+            document.getElementById('sos-banner').style.display = 'none';
+            document.getElementById('modal-chat-sos').style.display = 'flex';
+        }
+
+        function abrirModalSAC() {
+            document.getElementById('sac-banner').style.display = 'none';
+            document.getElementById('modal-chat-sac').style.display = 'flex';
+        }
+
+        async function enviarMensagemSOS() {
+            const input = document.getElementById('chat-input-sos');
+            const msg = input.value.trim();
+            if (!msg) return;
+            if (!telegramIdSOSAtual) {
+                return showToast("Erro: ID do motoboy nao encontrado.", "error");
+            }
+
+            try {
+                await fetch('/api/operacao/sos/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: telegramIdSOSAtual, texto: msg })
+                });
+                showToast("Enviado para o motoboy com sucesso.", "success");
+            } catch (e) {
+                console.error(e);
+                showToast('Falha ao enviar mensagem para o motoboy.', 'error');
+            }
+
+            const hist = document.getElementById('chat-history-sos');
+            hist.innerHTML += `<div style="align-self: flex-end; background: var(--accent); color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${msg}</div>`;
+            hist.scrollTop = hist.scrollHeight;
+            input.value = '';
+        }
+
+        async function enviarMensagemSAC() {
+            const input = document.getElementById('chat-input-sac');
+            const msg = input.value.trim();
+            if (!msg || !jidSACAtual) return;
+
+            try {
+                await fetch('/api/sac/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid: jidSACAtual, texto: msg })
+                });
+            } catch (e) {
+                console.error(e);
+                return showToast('Falha ao enviar mensagem para o cliente.', 'error');
+            }
+
+            const hist = document.getElementById('chat-history-sac');
+            hist.innerHTML += `<div style="align-self: flex-end; background: #0891b2; color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${msg}</div>`;
+            hist.scrollTop = hist.scrollHeight;
+            input.value = '';
+        }
+
+        let pedidos = [];
+        let pacotes = [];
+        let pacoteSelecionadoParaDespacho = null;
+
+        let map;
+        let drawingManager;
+        let zonas = [];
+        let overlayTemporario = null;
+        const paletaCores = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
+        let corIndex = 0;
+
+        let autocomplete;
+        let latLngPedidoAtual = null;
+        let zonaDetectadaAtual = null;
+
+        async function salvarKanbanStorage() {
+            try {
+                await Promise.all([
+                    fetch('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pedidos) }),
+                    fetch('/api/pacotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pacotes) })
+                ]);
+            } catch (e) {
+                console.error("Falha ao salvar kanban:", e);
+                showToast('Erro de sincronização com o servidor.', 'error');
+            }
+        }
+
+        async function carregarKanbanStorage() {
+            try {
+                const [pedidosRes, pacotesRes] = await Promise.all([
+                    fetch('/api/pedidos'),
+                    fetch('/api/pacotes')
+                ]);
+                pedidos = await pedidosRes.json();
+                pacotes = await pacotesRes.json();
+            } catch (e) {
+                console.error("Falha ao carregar kanban:", e);
+                showToast('Erro ao carregar dados do servidor.', 'error');
+            }
+            renderizarKanban();
+        }
+
+        function carregarScriptMapa(apiKey) {
+            if (window.google && window.google.maps) {
+                initMap();
+                initAutocomplete();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=drawing,geometry,places`;
+            script.async = true;
+            script.defer = true;
+            script.onload = () => { initMap(); initAutocomplete(); };
+            document.head.appendChild(script);
+        }
+
+        async function initMap() {
+            document.getElementById('map-warning').style.display = 'none';
+            document.getElementById('map').style.display = 'block';
+            document.getElementById('map-tools').style.display = 'flex';
+
+            const enderecoBase = document.getElementById('prof-endereco').value;
+            let centroLatLng = { lat: -23.550520, lng: -46.633308 };
+
+            if (enderecoBase) {
+                const geocoder = new google.maps.Geocoder();
+                try {
+                    const result = await geocoder.geocode({ address: enderecoBase });
+                    if (result.results[0]) centroLatLng = result.results[0].geometry.location;
+                } catch (e) {}
+            }
+
+            map = new google.maps.Map(document.getElementById('map'), { zoom: 13, center: centroLatLng, mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
+
+            drawingManager = new google.maps.drawing.DrawingManager({
+                drawingMode: null, drawingControl: false,
+                polygonOptions: { fillOpacity: 0.35, strokeWeight: 2, editable: false },
+                circleOptions: { fillOpacity: 0.35, strokeWeight: 2, editable: false }
+            });
+            drawingManager.setMap(map);
+
+            google.maps.event.addListener(drawingManager, 'overlaycomplete', function(event) {
+                overlayTemporario = event.overlay;
+                drawingManager.setDrawingMode(null);
+                resetarBotoesDesenho();
+                document.getElementById('zone-name').value = '';
+                document.getElementById('zone-fee').value = '';
+                document.getElementById('modal-zone').style.display = 'flex';
+            });
+
+            carregarZonasStorage();
+        }
+
+        async function salvarZonasStorage() {
+            const data = zonas.map(z => {
+                let tipo = z.overlay instanceof google.maps.Polygon ? 'polygon' : 'circle';
+                let coords = tipo === 'polygon' ? z.overlay.getPath().getArray().map(p => ({lat: p.lat(), lng: p.lng()})) : null;
+                let center = tipo === 'circle' ? {lat: z.overlay.getCenter().lat(), lng: z.overlay.getCenter().lng()} : null;
+                let radius = tipo === 'circle' ? z.overlay.getRadius() : null;
+                return { id: z.id, nome: z.nome, taxa: z.taxa, cor: z.cor, tipo, coords, center, radius };
+            });
+            try {
+                await fetch('/api/zonas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            } catch (e) {
+                console.error("Falha ao salvar zonas:", e);
+                showToast('Erro ao salvar mapa de taxas.', 'error');
+            }
+        }
+
+        async function carregarZonasStorage() {
+            try {
+                const res = await fetch('/api/zonas');
+                if (!res.ok) return;
+                const data = await res.json();
+                data.forEach(z => {
+                    let overlay;
+                    if(z.tipo === 'polygon') overlay = new google.maps.Polygon({ paths: z.coords, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
+                    else overlay = new google.maps.Circle({ center: z.center, radius: z.radius, fillColor: z.cor, strokeColor: z.cor, fillOpacity: 0.35, strokeWeight: 2 });
+
+                    overlay.setMap(map);
+                    zonas.push({ id: z.id, nome: z.nome, taxa: z.taxa, cor: z.cor, overlay: overlay });
+                });
+                atualizarListaZonas();
+            } catch (e) {
+                console.error("Falha ao carregar zonas:", e);
+                showToast('Erro ao carregar mapa de taxas.', 'error');
+            }
+        }
+
+        function initAutocomplete() {
+            const input = document.getElementById('pedido-endereco');
+            autocomplete = new google.maps.places.Autocomplete(input);
+            autocomplete.addListener('place_changed', onPlaceChanged);
+        }
+
+        function onPlaceChanged() {
+            const place = autocomplete.getPlace();
+            if (!place.geometry) return;
+            latLngPedidoAtual = place.geometry.location;
+            detectarZona(latLngPedidoAtual);
+        }
+
+        function detectarZona(latLng) {
+            zonaDetectadaAtual = null;
+            const feedback = document.getElementById('feedback-taxa');
+            feedback.style.display = 'block';
+
+            for (let zona of zonas) {
+                let inside = false;
+                if (zona.overlay instanceof google.maps.Polygon) inside = google.maps.geometry.poly.containsLocation(latLng, zona.overlay);
+                else if (zona.overlay instanceof google.maps.Circle) {
+                    const dist = google.maps.geometry.spherical.computeDistanceBetween(latLng, zona.overlay.getCenter());
+                    inside = dist <= zona.overlay.getRadius();
+                }
+
+                if (inside) {
+                    zonaDetectadaAtual = zona;
+                    feedback.innerHTML = `<b style="color:${zona.cor}">📍 Zona: ${zona.nome}</b><br>Taxa Automática: <b>R$ ${zona.taxa.toFixed(2)}</b>`;
+                    feedback.style.borderLeft = `4px solid ${zona.cor}`;
+                    document.getElementById('container-taxa-manual').style.display = 'none';
+                    return;
+                }
+            }
+            feedback.innerHTML = `<b style="color:#ef4444">⚠️ Fora de Área</b><br>Nenhuma zona de taxa detectada para este endereço.`;
+            feedback.style.borderLeft = `4px solid #ef4444`;
+            document.getElementById('container-taxa-manual').style.display = 'block';
+        }
+
+        function abrirModalNovoPedido() {
+            document.getElementById('pedido-edit-id').value = '';
+            document.getElementById('btn-salvar-pedido').textContent = 'Confirmar e Adicionar';
+            document.getElementById('pedido-nome').value = '';
+            document.getElementById('pedido-telefone').value = '';
+            document.getElementById('pedido-endereco').value = '';
+            document.getElementById('pedido-numero').value = '';
+            document.getElementById('pedido-apartamento').value = '';
+            document.getElementById('pedido-complemento').value = '';
+            document.getElementById('pedido-observacoes').value = '';
+            document.getElementById('pedido-ifood').value = '';
+            document.getElementById('feedback-taxa').style.display = 'none';
+            document.getElementById('pedido-taxa-manual').value = '';
+            document.getElementById('container-taxa-manual').style.display = 'none';
+            latLngPedidoAtual = null;
+            zonaDetectadaAtual = null;
+            document.getElementById('modal-novo-pedido').style.display = 'flex';
+            setTimeout(() => document.getElementById('pedido-nome').focus(), 100);
+        }
+
+        function abrirModalEditarPedido(id) {
+            const p = pedidos.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('pedido-edit-id').value = p.id;
+            document.getElementById('btn-salvar-pedido').textContent = 'Salvar Alterações';
+            document.getElementById('pedido-nome').value = p.nomeCliente || '';
+            document.getElementById('pedido-telefone').value = p.telefone || '';
+            document.getElementById('pedido-endereco').value = p.endereco || '';
+            document.getElementById('pedido-numero').value = p.numero || '';
+            document.getElementById('pedido-apartamento').value = p.apartamento || '';
+            document.getElementById('pedido-complemento').value = p.complemento || '';
+            document.getElementById('pedido-observacoes').value = p.observacoes || '';
+            document.getElementById('pedido-ifood').value = p.ifood || '';
+            document.getElementById('pedido-pagamento').value = p.pagamento || 'PIX';
+            latLngPedidoAtual = { lat: 0, lng: 0 };
+            const feedback = document.getElementById('feedback-taxa');
+            if (p.nomeZona && p.nomeZona !== 'Fora de Área') {
+                zonaDetectadaAtual = { taxa: p.taxa, cor: p.cor || '#cbd5e1', nome: p.nomeZona };
+                feedback.innerHTML = `<b style="color:${p.cor || '#00d0b7'}">📍 Zona: ${p.nomeZona}</b><br>Taxa: <b>R$ ${(p.taxa || 0).toFixed(2)}</b>`;
+                feedback.style.borderLeft = `4px solid ${p.cor || '#00d0b7'}`;
+                feedback.style.display = 'block';
+                document.getElementById('container-taxa-manual').style.display = 'none';
+                document.getElementById('pedido-taxa-manual').value = '';
+            } else {
+                zonaDetectadaAtual = null;
+                feedback.style.display = 'none';
+                document.getElementById('pedido-taxa-manual').value = p.taxa || '';
+                document.getElementById('container-taxa-manual').style.display = 'block';
+            }
+            document.getElementById('modal-novo-pedido').style.display = 'flex';
+            setTimeout(() => document.getElementById('pedido-nome').focus(), 100);
+        }
+
+        function salvarNovoPedido() {
+            const nomeCliente = document.getElementById('pedido-nome')?.value?.trim() || '';
+            const end = document.getElementById('pedido-endereco')?.value?.trim() || '';
+            const editId = document.getElementById('pedido-edit-id')?.value || '';
+
+            if (!nomeCliente) return showToast("O nome do cliente é obrigatório.", "error");
+            if (!end || !latLngPedidoAtual) return showToast("Selecione um endereço válido sugerido pelo Google.", "error");
+
+            const dadosCampos = {
+                nomeCliente: nomeCliente,
+                telefone: document.getElementById('pedido-telefone')?.value || '',
+                endereco: end,
+                numero: document.getElementById('pedido-numero')?.value?.trim() || '',
+                apartamento: document.getElementById('pedido-apartamento')?.value?.trim() || '',
+                complemento: document.getElementById('pedido-complemento')?.value?.trim() || '',
+                observacoes: document.getElementById('pedido-observacoes')?.value?.trim() || '',
+                ifood: document.getElementById('pedido-ifood')?.value || '',
+                pagamento: document.getElementById('pedido-pagamento')?.value || 'PIX',
+                taxa: zonaDetectadaAtual ? zonaDetectadaAtual.taxa : (parseFloat((document.getElementById('pedido-taxa-manual')?.value || '0').replace(',', '.')) || 0),
+                cor: zonaDetectadaAtual ? zonaDetectadaAtual.cor : '#cbd5e1',
+                nomeZona: zonaDetectadaAtual ? zonaDetectadaAtual.nome : 'Fora de Área',
+            };
+
+            let toastMsg;
+            if (editId) {
+                const idx = pedidos.findIndex(p => p.id === editId);
+                if (idx !== -1) {
+                    pedidos[idx] = { ...pedidos[idx], ...dadosCampos };
+                }
+                toastMsg = "Pedido atualizado com sucesso.";
+            } else {
+                pedidos.push({
+                    id: "ped_" + Date.now(),
+                    codigo_entrega: Math.floor(1000 + Math.random() * 9000).toString(),
+                    ...dadosCampos
+                });
+                toastMsg = "Pedido gerado e enviado para Preparação.";
+            }
+
+            salvarKanbanStorage();
+            renderizarKanban();
+            fecharModal('modal-novo-pedido');
+            showToast(toastMsg);
+        }
+
+        function criarPacote() {
+            pacotes.push({ id: "pac_" + Date.now(), pedidosIds: [], status: 'AGUARDANDO', motoboy: null });
+            salvarKanbanStorage();
+            renderizarKanban();
+        }
+
+        function deletarPacote(pacId) {
+            pacotes = pacotes.filter(p => p.id !== pacId);
+            salvarKanbanStorage();
+            renderizarKanban();
+        }
+
+        function renderizarKanban() {
+            const col1 = document.getElementById('coluna-preparacao');
+            const col2 = document.getElementById('coluna-aguardando-coleta');
+            const col3 = document.getElementById('coluna-em-rota');
+            col1.innerHTML = '';
+            col2.innerHTML = '';
+            col3.innerHTML = '';
+
+            const pedidosEmPacotes = pacotes.flatMap(p => p.pedidosIds);
+            const pedidosAvulsos = pedidos.filter(p => !pedidosEmPacotes.includes(p.id));
+
+            pedidosAvulsos.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'kanban-card';
+                el.draggable = true;
+                el.id = p.id;
+                el.style.borderLeftColor = p.cor;
+                el.ondragstart = drag;
+                el.ondragend = dragEnd;
+                el.ondblclick = () => abrirModalEditarPedido(p.id);
+                const detalhesAvulso = [
+                    p.numero ? `Nº ${p.numero}` : '',
+                    p.apartamento || '',
+                    p.complemento || ''
+                ].filter(Boolean).join(' · ');
+                el.innerHTML = `
+                    <div class="card-price">R$ ${(p.taxa || 0).toFixed(2)}</div>
+                    <div class="card-info" style="margin-bottom: 2px;">👤 <strong style="font-size: 0.95rem;">${p.nomeCliente || 'Cliente'}</strong></div>
+                    <div class="card-info" style="font-weight: 400; font-size: 0.8rem;">📍 ${(p.endereco || '').split(',')[0]}</div>
+                    ${detalhesAvulso ? `<div class="card-info" style="font-weight: 400; font-size: 0.78rem; color: #64748b;">🏠 ${detalhesAvulso}</div>` : ''}
+                    ${p.observacoes ? `<div class="card-info" style="font-weight: 400; font-size: 0.78rem; color: #64748b;">💬 ${p.observacoes}</div>` : ''}
+                    <div class="card-sub">${p.ifood ? 'iFood: ' + p.ifood + ' | ' : ''}${p.pagamento}</div>
+                    <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 5px;">✎ Duplo clique para editar</div>
+                    <button class="btn-remove-card" onclick="removerPedidoDefinitivo('${p.id}')">×</button>
+                `;
+                col1.appendChild(el);
+            });
+
+            pacotes.forEach(pac => {
+                const container = document.createElement('div');
+                container.className = 'package-container';
+                container.id = pac.id;
+                let itemsHtml = '';
+
+                let isPendente = pac.status === 'PENDENTE_ACEITE';
+
+                pac.pedidosIds.forEach(pid => {
+                    const p = pedidos.find(x => x.id === pid);
+                    if (p) {
+                        const nomeP = (p.nomeCliente || p.cliente_nome || 'Cliente');
+                        const endP = (p.endereco || '');
+                        const detalhesPac = [
+                            p.numero ? `Nº ${p.numero}` : '',
+                            p.apartamento || '',
+                            p.complemento || ''
+                        ].filter(Boolean).join(' · ');
+                        if (pac.status === 'AGUARDANDO') {
+                            itemsHtml += `
+                                <div class="package-item" style="border-left: 4px solid ${p.cor || '#cbd5e1'}; flex-wrap: wrap;">
+                                    <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+                                        <span><b>${nomeP.split(' ')[0]}</b> - ${endP.split(',')[0].substring(0,15)}...</span>
+                                        <b style="cursor:pointer; color:#ef4444; font-size: 1rem; margin-left: 10px;" onclick="tirarDoPacote('${pac.id}', '${p.id}')">×</b>
+                                    </div>
+                                    ${detalhesPac ? `<div style="width:100%; font-size:0.75rem; color:#64748b; margin-top:2px;">🏠 ${detalhesPac}</div>` : ''}
+                                    ${p.observacoes ? `<div style="width:100%; font-size:0.75rem; color:#64748b;">💬 ${p.observacoes}</div>` : ''}
+                                </div>`;
+                        } else {
+                            itemsHtml += `
+                                <div class="package-item" style="border-left: 4px solid ${p.cor || '#cbd5e1'}; flex-wrap: wrap;">
+                                    <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                        <span style="font-weight: bold;">${nomeP.split(' ')[0]} - ${endP.split(',')[0].substring(0,10)}...</span>
+                                        <span style="font-family: var(--font-mono); color: var(--accent); font-weight: bold;">Cod: ${p.codigo_entrega || '----'}</span>
+                                    </div>
+                                    ${detalhesPac ? `<div style="width:100%; font-size:0.75rem; color:#64748b; margin-bottom:3px;">🏠 ${detalhesPac}</div>` : ''}
+                                    ${p.observacoes ? `<div style="width:100%; font-size:0.75rem; color:#64748b; margin-bottom:3px;">💬 ${p.observacoes}</div>` : ''}
+                                    ${!isPendente ? `<div style="width: 100%; text-align: right;"><button class="btn-create" style="background:#10b981; padding:4px 10px; font-size: 0.75rem;" onclick="finalizarEntregaUnica('${pac.id}', '${p.id}')">✔ Entregue</button></div>` : ''}
+                                </div>`;
+                        }
+                    }
+                });
+
+                if (pac.status === 'AGUARDANDO') {
+                    container.innerHTML = `
+                        <div class="package-header">
+                            <span>📦 PACOTE #${(pac.id.split('_')[1] || pac.id).substring(6)}</span>
+                            <div>
+                                <button class="btn-create" style="padding:4px 8px; background: #ef4444; margin-right: 5px;" onclick="deletarPacote('${pac.id}')">🗑️</button>
+                                <button class="btn-create" style="padding:4px 10px" onclick="abrirModalDespacho('${pac.id}')">DESPACHAR</button>
+                            </div>
+                        </div>
+                        <div class="package-drop-zone" ondragover="allowDrop(event)" ondrop="dropToPackage(event, '${pac.id}')">${itemsHtml || '<div style="font-size:0.7rem; color:#94a3b8; text-align:center; margin-top:10px;">Arraste os pedidos aqui</div>'}</div>
+                    `;
+                    col2.appendChild(container);
+                } else {
+                    let borderColor = isPendente ? '#f59e0b' : '#3b82f6';
+                    let bgColor = isPendente ? '#fffbeb' : '#eff6ff';
+                    const motoboyNome = pac.motoboy?.nome || 'Motoboy';
+                    const coletadoLabel = pac.coletado ? ' <span style="font-size:0.7rem; background:#10b981; color:#fff; border-radius:4px; padding:1px 5px;">Coletado</span>' : '';
+                    let headerText = isPendente ? `⏳ AGUARDANDO: ${motoboyNome.split(' ')[0]}${coletadoLabel}` : `🚀 ROTA: ${motoboyNome.split(' ')[0]}${coletadoLabel}`;
+                    let headerColor = isPendente ? '#b45309' : '#1d4ed8';
+                    let btnColetarHTML = (!isPendente && !pac.coletado) ? `<button class="btn-create" style="background:#10b981; padding:4px 8px; margin-right:0;" onclick="confirmarColeta('${pac.id}')">📦 Confirmar Coleta</button>` : '';
+                    let btnCancelarHTML = !pac.coletado ? `<button class="btn-create" style="background:#ef4444; padding:4px 8px" onclick="cancelarDespacho('${pac.id}')">✖ Cancelar</button>` : '';
+
+                    container.style.borderColor = borderColor;
+                    container.style.background = bgColor;
+
+                    container.innerHTML = `
+                        <div class="package-header" style="color:${headerColor}; margin-bottom: 10px;">
+                            <span>${headerText}</span>
+                            <div style="display:flex; gap:5px">
+                                ${btnColetarHTML}
+                                ${btnCancelarHTML}
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">${itemsHtml}</div>
+                    `;
+                    col3.appendChild(container);
+                }
+            });
+        }
+
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.id);
+            setTimeout(() => ev.target.classList.add('dragging'), 0);
+        }
+
+        function dragEnd(ev) {
+            ev.target.classList.remove('dragging');
+        }
+
+        function allowDrop(ev) {
+            ev.preventDefault();
+            if (ev.currentTarget.classList.contains('package-drop-zone') || ev.currentTarget.id === 'col-1-zone') {
+                ev.currentTarget.classList.add('drop-zone-active');
+            }
+        }
+
+        function dropToPackage(ev, packageId) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('drop-zone-active');
+            const pedidoId = ev.dataTransfer.getData("text");
+            const pacote = pacotes.find(p => p.id === packageId);
+            if (pedidos.some(p => p.id === pedidoId) && pacote && !pacote.pedidosIds.includes(pedidoId)) {
+                pacotes.forEach(pac => { pac.pedidosIds = pac.pedidosIds.filter(id => id !== pedidoId); });
+                pacote.pedidosIds.push(pedidoId);
+                salvarKanbanStorage();
+                renderizarKanban();
+            }
+        }
+
+        function dropToCol1(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('drop-zone-active');
+            const pedidoId = ev.dataTransfer.getData("text");
+            pacotes.forEach(pac => {
+                if (pac.pedidosIds.includes(pedidoId)) pac.pedidosIds = pac.pedidosIds.filter(id => id !== pedidoId);
+            });
+            salvarKanbanStorage();
+            renderizarKanban();
+        }
+
+        function tirarDoPacote(pacId, pedId) {
+            const pac = pacotes.find(p => p.id === pacId);
+            pac.pedidosIds = pac.pedidosIds.filter(id => id !== pedId);
+            salvarKanbanStorage();
+            renderizarKanban();
+        }
+
+        function removerPedidoDefinitivo(id) {
+            confirmarAcao("Excluir este pedido do sistema?", async () => {
+                pedidos = pedidos.filter(p => p.id !== id);
+                salvarKanbanStorage();
+                renderizarKanban();
+            });
+        }
+
+        window.confirmarColeta = async function(pacId) {
+            confirmarAcao("Confirmar que o motoboy coletou os pedidos? Após isso, o cancelamento será bloqueado.", async () => {
+                try {
+                    const res = await fetch('/api/operacao/coletar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pacoteId: pacId })
+                    });
+                    if (!res.ok) throw new Error();
+                    showToast('Coleta confirmada! Cancelamento bloqueado.', 'success');
+                    await carregarKanbanStorage();
+                } catch {
+                    showToast('Erro ao confirmar coleta.', 'error');
+                }
+            });
+        };
+
+        async function abrirModalDespacho(pacId) {
+            pacoteSelecionadoParaDespacho = pacId;
+            _pacoteParaNuvem = pacId;
+            document.getElementById('lista-nuvem-disponiveis').innerHTML = '';
+            const pac = pacotes.find(p => p.id === pacId);
+            if (pac.pedidosIds.length === 0) return showToast("Não dá pra despachar um pacote vazio!", "error");
+
+            const container = document.getElementById('lista-motoboys-disponiveis');
+            container.innerHTML = '<p style="font-size:0.8rem">Buscando radar da frota...</p>';
+            document.getElementById('modal-despacho').style.display = 'flex';
+
+            try {
+                const res = await fetch('/api/fleet');
+                const frota = await res.json();
+                const online = frota.filter(m => m.status === 'ONLINE' || m.status === 'EM_ENTREGA');
+
+                if (online.length === 0) {
+                    container.innerHTML = '<p style="color:#ef4444; font-size:0.85rem">Nenhum motoboy operando no momento.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                online.forEach(m => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-edit';
+                    btn.style.textAlign = 'left';
+                    btn.style.width = '100%';
+                    btn.innerHTML = `🛵 <b>${m.nome}</b> <span style="float:right; font-size:0.7rem">${m.veiculo || ''}</span>`;
+                    btn.onclick = () => confirmarDespacho(m);
+                    container.appendChild(btn);
+                });
+            } catch (e) {
+                container.innerHTML = 'Erro ao carregar frota.';
+            }
+        }
+
+        async function confirmarDespacho(motoboy) {
+            document.getElementById("lista-motoboys-disponiveis").innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-dark);"><b>⏳ Processando Despacho...</b><br><br><small>A Inteligência Artificial está a resumir a rota. Por favor, aguarde uns segundos.</small></div>';
+            const pac = pacotes.find(p => p.id === pacoteSelecionadoParaDespacho);
+            pac.status = 'PENDENTE_ACEITE';
+            pac.motoboy = motoboy;
+
+            try {
+                const pedidosDoPacote = pac.pedidosIds.map(pid => pedidos.find(p => p.id === pid));
+                await fetch('/api/operacao/despachar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pacoteId: pac.id, motoboy: motoboy, pedidos: pedidosDoPacote })
+                });
+            } catch (e) {}
+
+            fecharModal('modal-despacho');
+            salvarKanbanStorage();
+            renderizarKanban();
+            showToast(`Pacote enviado! Aguardando confirmação de ${motoboy.nome.split(' ')[0]}.`);
+        }
+
+        function cancelarDespacho(pacId) {
+            const pac = pacotes.find(p => p.id === pacId);
+            pac.status = 'AGUARDANDO';
+            pac.motoboy = null;
+            salvarKanbanStorage();
+            renderizarKanban();
+            showToast('O pacote retornou para Aguardando Coleta.');
+        }
+
+        function finalizarEntregaUnica(pacId, pedId) {
+            confirmarAcao("Confirmar a entrega na porta deste cliente?", async () => {
+                try {
+                    fetch('/api/operacao/baixa', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pedidoId: pedId })
+                    });
+                } catch(e) {}
+                baixarPedidoPeloSistema(pedId);
+            });
+        }
+
+        function baixarPedidoPeloSistema(pedId) {
+            const pac = pacotes.find(p => p.pedidosIds.includes(pedId));
+            if (!pac) return;
+
+            pedidos = pedidos.filter(p => p.id !== pedId);
+            pac.pedidosIds = pac.pedidosIds.filter(id => id !== pedId);
+
+            if (pac.pedidosIds.length === 0) {
+                pacotes = pacotes.filter(p => p.id !== pac.id);
+                showToast("Todas as entregas da rota foram concluídas!");
+            } else {
+                showToast("Entrega confirmada com sucesso!");
+            }
+
+            salvarKanbanStorage();
+            renderizarKanban();
+        }
+
+        function setDrawingMode(mode) {
+            if (!drawingManager) return;
+            resetarBotoesDesenho();
+            if (mode === 'polygon') {
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
+                document.getElementById('btn-draw-poly').classList.add('active');
+            } else if (mode === 'circle') {
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.CIRCLE);
+                document.getElementById('btn-draw-circle').classList.add('active');
+            } else {
+                drawingManager.setDrawingMode(null);
+                document.getElementById('btn-draw-hand').style.background = 'var(--accent)';
+                document.getElementById('btn-draw-hand').style.color = 'white';
+            }
+        }
+
+        function resetarBotoesDesenho() {
+            document.getElementById('btn-draw-poly').classList.remove('active');
+            document.getElementById('btn-draw-circle').classList.remove('active');
+            document.getElementById('btn-draw-hand').style.background = '#f8fafc';
+            document.getElementById('btn-draw-hand').style.color = 'var(--text-dark)';
+        }
+
+        function cancelarCriacaoZona() {
+            if (overlayTemporario) overlayTemporario.setMap(null);
+            overlayTemporario = null;
+            fecharModal('modal-zone');
+            setDrawingMode('hand');
+        }
+
+        function salvarCriacaoZona() {
+            const nome = document.getElementById('zone-name').value;
+            const taxa = parseFloat(document.getElementById('zone-fee').value);
+            if (!nome || isNaN(taxa)) return showToast('Preencha o nome e o valor da taxa.', 'error');
+            const corEscolhida = paletaCores[corIndex % paletaCores.length];
+            corIndex++;
+            overlayTemporario.setOptions({ fillColor: corEscolhida, strokeColor: corEscolhida });
+            zonas.push({ id: Date.now(), nome: nome, taxa: taxa, cor: corEscolhida, overlay: overlayTemporario });
+            overlayTemporario = null;
+            salvarZonasStorage();
+            fecharModal('modal-zone');
+            atualizarListaZonas();
+            showToast('Zona criada com sucesso!');
+            setDrawingMode('hand');
+        }
+
+        function deletarZona(idZona) {
+            const index = zonas.findIndex(z => z.id === idZona);
+            if (index > -1) {
+                zonas[index].overlay.setMap(null);
+                zonas.splice(index, 1);
+                salvarZonasStorage();
+                atualizarListaZonas();
+                showToast('Zona excluída.');
+            }
+        }
+
+        function atualizarListaZonas() {
+            const container = document.getElementById('zones-list-container');
+            const content = document.getElementById('zones-list-content');
+            content.innerHTML = '';
+            if (zonas.length === 0) return container.style.display = 'none';
+            container.style.display = 'block';
+            zonas.forEach(z => {
+                const item = document.createElement('div');
+                item.className = 'zone-item';
+                item.innerHTML = `<div style="display: flex; align-items: center;"><span class="zone-color-dot" style="background-color: ${z.cor};"></span><div><div style="font-weight: 600; font-size: 0.9rem; color: var(--text-dark);">${z.nome}</div><div style="font-size: 0.8rem; color: var(--text-light); font-family: var(--font-mono);">R$ ${z.taxa.toFixed(2).replace('.', ',')}</div></div></div><button onclick="deletarZona(${z.id})" style="background: none; border: none; color: #ef4444; font-size: 1.2rem; cursor: pointer; padding: 0 5px;">&times;</button>`;
+                content.appendChild(item);
+            });
+        }
+
+        let mapRastreio = null;
+        let markerRastreio = null;
+        function localizarNoMapa(lat, lng, nome) {
+            if (!lat || !lng) return showToast(`Sem sinal de GPS para ${nome} no momento.`, 'error');
+            document.getElementById('track-nome').innerText = nome;
+            document.getElementById('modal-tracking').style.display = 'flex';
+            const posicao = { lat: parseFloat(lat), lng: parseFloat(lng) };
+            setTimeout(() => {
+                if (!mapRastreio) {
+                    mapRastreio = new google.maps.Map(document.getElementById('tracking-map-canvas'), { zoom: 17, center: posicao, mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
+                } else {
+                    mapRastreio.setCenter(posicao);
+                    mapRastreio.setZoom(17);
+                }
+                if (markerRastreio) markerRastreio.setMap(null);
+                markerRastreio = new google.maps.Marker({ position: posicao, map: mapRastreio, title: nome, animation: google.maps.Animation.DROP });
+            }, 200);
+        }
+
+        function fecharModalRastreio() {
+            document.getElementById('modal-tracking').style.display = 'none';
+        }
+
+        window.abrirAlertaBanimento = function() {
+            document.getElementById('modal-alerta-ban').style.display = 'flex';
+        };
+
+        window.fecharAlertaBanimento = function() {
+            document.getElementById('modal-alerta-ban').style.display = 'none';
+        };
+
+        window.confirmarApiNaoOficial = function() {
+            fecharAlertaBanimento();
+            document.getElementById('modal-qr-whatsapp').style.display = 'flex';
+            document.getElementById('qr-code-img').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=Aguardando_Sessao';
+            try { fetch('/api/whatsapp/start'); } catch(e) {}
+            window.qrInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/whatsapp/status');
+                    if(res.ok) {
+                        const data = await res.json();
+                        if (data.qr) document.getElementById('qr-code-img').src = data.qr;
+                        if (data.status === 'CONNECTED') {
+                            clearInterval(window.qrInterval);
+                            showToast('WhatsApp Conectado com Sucesso!');
+                            setTimeout(() => fecharModalQR(), 1500);
+                        }
+                    }
+                } catch (e) {}
+            }, 2000);
+        };
+
+        window.fecharModalQR = function() {
+            if (window.qrInterval) clearInterval(window.qrInterval);
+            document.getElementById('modal-qr-whatsapp').style.display = 'none';
+        };
+
+        function switchTab(id, el) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            el.classList.add('active');
+            if(id === 'tab-frota') carregarFrota();
+            if(id === 'tab-mapa' && map) {
+                google.maps.event.trigger(map, 'resize');
+                const enderecoBase = document.getElementById('prof-endereco').value;
+                if(enderecoBase) new google.maps.Geocoder().geocode({ address: enderecoBase }, (res, status) => {
+                    if(status === 'OK') map.setCenter(res[0].geometry.location);
+                });
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('notification-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            if (type === 'error') toast.classList.add('error');
+            toast.innerText = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        let activeWS = null;
+        function connectWS() {
+            if (activeWS && (activeWS.readyState === WebSocket.OPEN || activeWS.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            activeWS = new WebSocket('ws://localhost:3000/ws/logs');
+            const ws = activeWS;
+            ws.onmessage = (event) => {
+                try {
+                    const log = JSON.parse(event.data);
+
+                    if (log.tipo === 'SOS_MSG') {
+                        telegramIdSOSAtual = log.telegram_id;
+                        const hist = document.getElementById('chat-history-sos');
+                        hist.innerHTML += `<div style="align-self: flex-start; background: #f1f5f9; color: #0f172a; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;">${log.mensagem}</div>`;
+                        hist.scrollTop = hist.scrollHeight;
+                    }
+                    else if (log.tipo === 'SOS') {
+                        telegramIdSOSAtual = log.telegram_id || null;
+                        document.getElementById('sos-text').innerText = log.mensagem;
+                        document.getElementById('sos-banner').style.display = 'block';
+
+                        const hist = document.getElementById('chat-history-sos');
+                        hist.innerHTML += `<div style="align-self: flex-start; background: #ef4444; color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;"><b>Motoboy:</b> ${log.mensagem}</div>`;
+                        hist.scrollTop = hist.scrollHeight;
+
+                        const beep = document.getElementById('beep-sound');
+                        beep.play().catch(e => console.log('Áudio bloqueado'));
+                    }
+                    else if (log.tipo === 'SOS_ENCERRADO') {
+                        telegramIdSOSAtual = null;
+                        document.getElementById('sos-banner').style.display = 'none';
+                        document.getElementById('chat-history-sos').innerHTML = '';
+                        fecharModal('modal-chat-sos');
+                    }
+                    else if (log.tipo === 'SAC_REQUEST') {
+                        jidSACAtual = log.jid;
+                        document.getElementById('sac-text').innerText = log.mensagem;
+                        document.getElementById('sac-banner').style.display = 'block';
+                        document.getElementById("beep-sound").play();
+                    }
+                    else if (log.tipo === 'SAC_MSG') {
+                        jidSACAtual = log.jid;
+                        const hist = document.getElementById('chat-history-sac');
+                        hist.innerHTML += `<div style="align-self: flex-start; background: #f1f5f9; color: #0f172a; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;"><b>${log.nome || 'Cliente'}:</b> ${log.mensagem}</div>`;
+                        hist.scrollTop = hist.scrollHeight;
+                    }
+                    else if (log.tipo === 'ACEITE_ROTA' || (log.tipo === 'NUVEM' && log.pacoteId)) {
+                        const pac = pacotes.find(p => p.id === log.pacoteId);
+                        if (pac) {
+                            pac.status = 'EM_ROTA';
+                            salvarKanbanStorage();
+                            renderizarKanban();
+                            showToast(log.tipo === 'NUVEM' ? 'Parceiro Nuvem aceitou a rota!' : 'Motoboy confirmou a rota!', 'success');
+                        } else if (log.pacoteId) {
+                            // Pacote não está no cache local — recarrega do servidor
+                            carregarKanbanStorage().then(() => showToast('Motoboy confirmou a rota!', 'success'));
+                        }
+                    }
+                    else if (log.tipo === 'RECUSA_ROTA') {
+                        const pac = pacotes.find(p => p.id === log.pacoteId);
+                        if (pac) {
+                            pac.status = 'AGUARDANDO';
+                            pac.motoboy = null;
+                            salvarKanbanStorage();
+                            renderizarKanban();
+                            document.getElementById("beep-sound").play();
+                        }
+                    }
+                    else if (log.tipo === 'BAIXA_PEDIDO') {
+                        baixarPedidoPeloSistema(log.pedidoId);
+                        showToast(`Motoboy confirmou a entrega pelo app!`, 'success');
+                    }
+                    else if (log.tipo === 'FINANCEIRO') {
+                        if (log.mensagem && log.mensagem.includes('confirmou recebimento')) {
+                            carregarFrota();
+                            showToast('✅ ' + log.mensagem, 'success');
+                        }
+                    }
+                    else {
+                        showToast(`[${log.tipo}] ${log.mensagem}`, log.tipo === 'ERROR' ? 'error' : 'success');
+                    }
+
+                    if (log.tipo === 'FROTA' && document.getElementById('tab-frota').classList.contains('active')) carregarFrota();
+                } catch (e) {}
+            };
+            ws.onclose = () => { activeWS = null; setTimeout(connectWS, 3000); };
+        }
+
+        async function salvarPerfil() {
+            const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+            const getChk = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+            const getChaveVal = (id) => {
+                const el = document.getElementById(id);
+                if (!el || el.disabled || el.value === '' || el.value === 'Configurado ✓') return null;
+                return el.value;
+            };
+
+            const documento = getVal('prof-documento').replace(/\D/g, '');
+            const erroDocEl = document.getElementById('erro-documento');
+            const docInput = document.getElementById('prof-documento');
+            if (documento && !validarDocumento(documento)) {
+                if (erroDocEl) erroDocEl.style.display = 'block';
+                if (docInput) docInput.classList.add('is-invalid');
+                showToast('CPF / CNPJ do responsável inválido', 'error');
+                return;
+            }
+            if (erroDocEl) erroDocEl.style.display = 'none';
+            if (docInput) docInput.classList.remove('is-invalid');
+
+            const body = {
+                nome: getVal('prof-nome') || null,
+                documento: documento || null,
+                endereco: getVal('prof-endereco') || null,
+                whatsapp: getVal('prof-whatsapp') || null,
+                link_cardapio: getVal('prof-link-cardapio') || null,
+                telegram_bot_token: getChaveVal('prof-telegram-token'),
+                google_maps_key: getChaveVal('prof-google-maps-key'),
+                openai_key: getChaveVal('prof-openai-key'),
+                horarios: {
+                    seg: { on: getChk('dia-seg'), abre: getVal('hora-seg-abre'), fecha: getVal('hora-seg-fecha') },
+                    ter: { on: getChk('dia-ter'), abre: getVal('hora-ter-abre'), fecha: getVal('hora-ter-fecha') },
+                    qua: { on: getChk('dia-qua'), abre: getVal('hora-qua-abre'), fecha: getVal('hora-qua-fecha') },
+                    qui: { on: getChk('dia-qui'), abre: getVal('hora-qui-abre'), fecha: getVal('hora-qui-fecha') },
+                    sex: { on: getChk('dia-sex'), abre: getVal('hora-sex-abre'), fecha: getVal('hora-sex-fecha') },
+                    sab: { on: getChk('dia-sab'), abre: getVal('hora-sab-abre'), fecha: getVal('hora-sab-fecha') },
+                    dom: { on: getChk('dia-dom'), abre: getVal('hora-dom-abre'), fecha: getVal('hora-dom-fecha') }
+                },
+                whatsapp_ativo: getChk('prof-whatsapp-ativo') ? 1 : 0
+            };
+
+            try {
+                const btn = document.getElementById('btn-salvar-perfil');
+                if (btn) btn.disabled = true;
+                const response = await fetch('/api/profile/admin', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${response.status}`);
+                }
+                showToast('Base, Horários e Chaves Salvos!');
+                if (body.google_maps_key && !window.google) carregarScriptMapa(body.google_maps_key);
+            } catch(e) {
+                showToast('Erro ao salvar: ' + e.message, 'error');
+            } finally {
+                const btn = document.getElementById('btn-salvar-perfil');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function dispararConvite() {
+            const btn = document.getElementById('btn-disparar');
+            btn.disabled = true;
+            btn.innerText = '⏳ Gerando...';
+
+            let token;
+            try {
+                const perfil = await fetch('/api/profile/admin?t=' + Date.now(), { cache: 'no-store' });
+                const pd = await perfil.json();
+                token = pd.telegram_bot_token;
+            } catch(e) {}
+
+            if (!token) {
+                showToast('⚠️ Token do Telegram não encontrado no QG Logístico.', 'error');
+                btn.disabled = false; btn.innerText = '📱 QR de Cadastro';
+                return;
+            }
+
+            try {
+                const res = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+                const data = await res.json();
+                if (!data.ok) {
+                    showToast('⚠️ Bot do Telegram fora do ar.', 'error');
+                    btn.disabled = false; btn.innerText = '📱 QR de Cadastro';
+                    return;
+                }
+
+                const resToken = await fetch('/api/gerar-token-bot');
+                const tokenData = await resToken.json();
+                const linkBot = `https://t.me/${data.result.username}?start=${tokenData.token}`;
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(linkBot)}`;
+
+                const overlay = document.createElement('div');
+                overlay.id = 'qr-convite-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+                overlay.innerHTML = `
+                    <div style="background:#fff;border-radius:16px;padding:28px;text-align:center;max-width:340px;width:90%">
+                        <div style="font-size:1.3rem;font-weight:700;color:#0f172a;margin-bottom:4px">📱 Convite de Cadastro</div>
+                        <div style="font-size:0.85rem;color:#64748b;margin-bottom:16px">Mostre para o motoboy escanear</div>
+                        <img src="${qrUrl}" style="width:220px;height:220px;border-radius:8px;border:1px solid #e2e8f0">
+                        <div style="font-size:0.75rem;color:#94a3b8;margin-top:10px;word-break:break-all">${linkBot}</div>
+                        <button onclick="document.getElementById('qr-convite-overlay').remove()" style="margin-top:16px;padding:10px 28px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:0.9rem;font-weight:600;cursor:pointer">Fechar</button>
+                    </div>`;
+                document.body.appendChild(overlay);
+                overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+            } catch (e) {
+                showToast('⚠️ Erro ao gerar QR Code.', 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerText = '📱 QR de Cadastro';
+        }
+
+        async function carregarFrota() {
+            try {
+                const res = await fetch('/api/fleet');
+                if(!res.ok) return;
+                const frota = await res.json();
+                const container = document.getElementById('fleet-container');
+                container.innerHTML = '';
+                if (frota.length === 0) return container.innerHTML = '<p style="color: var(--text-light); grid-column: 1 / -1;">Nenhum motoboy cadastrado.</p>';
+
+                _frotaAtual = frota;
+                frota.forEach(moto => {
+                    const ehNuvem = moto.vinculo === 'Nuvem';
+                    let badgeClass = moto.status === 'ONLINE' ? 'status-online' : (moto.status === 'EM_ENTREGA' ? 'status-em_entrega' : 'status-offline');
+                    const dataFormatada = moto.ultima_atualizacao ? new Date(moto.ultima_atualizacao).toLocaleString('pt-BR') : '-';
+                    const escNome = moto.nome ? moto.nome.replace(/'/g, "\\'") : '';
+                    const escPix = moto.pix ? moto.pix.replace(/'/g, "\\'") : '';
+                    const escWhatsapp = moto.whatsapp ? moto.whatsapp.replace(/'/g, "\\'") : '';
+
+                    const card = document.createElement('div');
+                    card.className = 'fleet-card';
+                    card.dataset.moto = JSON.stringify({ ...moto, _nuvem: _nuvemCards[moto.telegram_id] || {} });
+
+                    if (ehNuvem) {
+                        card.style.background = '#f0f7ff';
+                        card.style.borderLeft = '4px solid #3b82f6';
+                    }
+
+                    const nuvemDados = _nuvemCards[moto.telegram_id] || {};
+                    const nuvemBadge = ehNuvem
+                        ? `<div style="margin-bottom:10px;"><span style="background:#3b82f6;color:white;font-size:11px;border-radius:4px;padding:2px 8px;font-weight:600;">🌐 PARCEIRO NUVEM</span></div>`
+                        : '';
+                    const nuvemOrigem = ehNuvem
+                        ? `<div><small style="color:#6b7280">📍 Origem: ${nuvemDados.no_nome || 'Parceiro'}</small></div>`
+                        : '';
+
+                    const botoesAcao = ehNuvem
+                        ? `<button class="btn-action btn-edit" style="background:#eff6ff;color:#3b82f6;border-color:#bfdbfe;" onclick="abrirDadosNuvem('${moto.telegram_id}')">📋 Dados</button>
+                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
+                           <button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')" ${moto.status === 'EM_ROTA' ? 'disabled title="Em rota — cancelamento bloqueado"' : ''}>❌ Cancelar</button>`
+                        : `<button class="btn-action btn-edit" onclick="abrirModalEditar('${moto.telegram_id}', '${escNome}', '${escWhatsapp}', '${moto.vinculo}', '${moto.veiculo || ''}', '${escPix}')">✏️ Editar</button>
+                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
+                           <button class="btn-action btn-history" onclick="abrirModalHistorico('${moto.telegram_id}', '${escNome}')">📜 Histórico</button>`;
+
+                    card.innerHTML = `
+                        ${nuvemBadge}
+                        <div class="fleet-header"><strong style="font-size: 1.1rem; color: var(--text-dark);">${moto.nome || 'Sem Nome'}</strong>${ehNuvem ? `<small style="color:#eab308; font-weight:bold; margin-left: 8px;">⭐ ${nuvemDados.estrelas ? parseFloat(nuvemDados.estrelas).toFixed(1) : '5.0'}</small>` : ''}<span class="status-badge ${badgeClass}">${moto.status}</span></div>
+                        <div style="font-size: 0.85rem; color: var(--text-light); line-height: 1.6; margin-bottom: 15px;">
+                            ${nuvemOrigem}
+                            <div>🏍️ <b>Veículo:</b> ${moto.veiculo || '-'}</div><div>💼 <b>Vínculo:</b> ${moto.vinculo || '-'}</div><div>🔑 <b>PIX:</b> <span style="font-family: var(--font-mono);">${moto.pix || '-'}</span></div>
+                            <div style="margin-top: 8px; font-size: 0.75rem;">📡 <i>Sinal GPS: ${dataFormatada}</i></div>
+                        </div>
+                        <div style="display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 15px;">
+                            <button class="btn-action btn-loc" onclick="localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')">👁️ Ver</button>
+                            ${botoesAcao}
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (e) {}
+        }
+
+        async function excluirMotoboy(id) {
+            confirmarAcao("Excluir este motoboy?", async () => {
+                await fetch(`/api/fleet/${id}`, { method: 'DELETE' });
+                carregarFrota();
+            });
+        }
+
+        async function abrirModalHistorico(id, nome) {
+            document.getElementById('hist-titulo').textContent = 'Historico: ' + (nome || id);
+            const lista = document.getElementById('hist-lista');
+            lista.innerHTML = '<p style="color: var(--text-light); font-size: 0.85rem;">Carregando...</p>';
+            document.getElementById('modal-historico').style.display = 'flex';
+            try {
+                const res = await fetch('/api/historico/' + id);
+                const itens = await res.json();
+                if (!itens.length) {
+                    lista.innerHTML = '<p style="color: var(--text-light); font-size: 0.85rem; text-align: center; padding: 20px 0;">Nenhum registro encontrado.</p>';
+                    return;
+                }
+                lista.innerHTML = itens.map(item => {
+                    const isAcerto = item.tipo === 'ACERTO';
+                    const cor = isAcerto ? '#b91c1c' : '#0284c7';
+                    const bg = isAcerto ? '#fef2f2' : '#eff6ff';
+                    const border = isAcerto ? '#fecaca' : '#bfdbfe';
+                    const icone = isAcerto ? '💸' : '🏍️';
+                    const sinal = isAcerto ? '- ' : '+ ';
+                    const data = new Date(item.data_criacao).toLocaleString('pt-BR');
+                    return '<div style="background:' + bg + '; border: 1px solid ' + border + '; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">' +
+                        '<div>' +
+                        '<div style="font-size: 0.85rem; font-weight: 600; color: ' + cor + ';">' + icone + ' ' + item.descricao + '</div>' +
+                        '<div style="font-size: 0.75rem; color: var(--text-light); margin-top: 2px;">' + data + '</div>' +
+                        '</div>' +
+                        '<div style="font-family: var(--font-mono); font-weight: 700; color: ' + cor + ';">' + sinal + 'R$ ' + (item.valor || 0).toFixed(2) + '</div>' +
+                        '</div>';
+                }).join('');
+            } catch(e) {
+                lista.innerHTML = '<p style="color: #b91c1c; font-size: 0.85rem;">Erro ao carregar histórico.</p>';
+            }
+        }
+
+        function mascararDocumento(input) {
+            let v = input.value.replace(/\D/g, '');
+            if (v.length > 14) v = v.substring(0, 14);
+            if (v.length <= 11) {
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            } else {
+                v = v.replace(/(\d{2})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d)/, '$1/$2');
+                v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+            }
+            input.value = v;
+            const digits = v.replace(/\D/g, '');
+            const erroEl = document.getElementById('erro-documento');
+            if (digits.length === 0) {
+                input.classList.remove('is-invalid');
+                if (erroEl) erroEl.style.display = 'none';
+            } else if ((digits.length === 11 || digits.length === 14) && validarDocumento(digits)) {
+                input.classList.remove('is-invalid');
+                if (erroEl) erroEl.style.display = 'none';
+            } else if (digits.length === 11 || digits.length === 14) {
+                input.classList.add('is-invalid');
+                if (erroEl) erroEl.style.display = 'block';
+            } else {
+                input.classList.remove('is-invalid');
+                if (erroEl) erroEl.style.display = 'none';
+            }
+        }
+
+        function validarDocumento(doc) {
+            const d = doc.replace(/\D/g, '');
+            if (d.length === 11) {
+                if (/^(\d)\1{10}$/.test(d)) return false;
+                let s = 0;
+                for (let i = 0; i < 9; i++) s += parseInt(d[i]) * (10 - i);
+                let r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+                if (r !== parseInt(d[9])) return false;
+                s = 0;
+                for (let i = 0; i < 10; i++) s += parseInt(d[i]) * (11 - i);
+                r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
+                return r === parseInt(d[10]);
+            }
+            if (d.length === 14) {
+                if (/^(\d)\1{13}$/.test(d)) return false;
+                const calc = (n) => {
+                    let s = 0, p = n - 7;
+                    for (let i = 0; i < n; i++) { p = p < 2 ? p + 8 : p; s += parseInt(d[i]) * p--; }
+                    const r = s % 11; return r < 2 ? 0 : 11 - r;
+                };
+                return calc(12) === parseInt(d[12]) && calc(13) === parseInt(d[13]);
+            }
+            return false;
+        }
+
+        function abrirModalEditar(id, nome, whatsapp, vinculo, veiculo, pix) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-nome').value = nome || '';
+            document.getElementById('edit-whatsapp').value = whatsapp || '';
+            document.getElementById('edit-pix').value = pix || '';
+            document.getElementById('edit-vinculo').value = vinculo === 'Freelancer' ? 'Freelancer' : 'Fixo';
+            document.getElementById('edit-veiculo').value = veiculo || '';
+            document.getElementById('modal-edit').style.display = 'flex';
+        }
+
+        async function salvarEdicao() {
+            const id = document.getElementById('edit-id').value;
+            const whatsapp = document.getElementById('edit-whatsapp').value.trim().replace(/\D/g, '');
+            if (whatsapp && (whatsapp.length < 10 || whatsapp.length > 13)) {
+                return showToast('WhatsApp inválido. Use somente números com DDD.', 'error');
+            }
+            const body = {
+                nome: document.getElementById('edit-nome').value.trim(),
+                whatsapp: whatsapp,
+                pix: document.getElementById('edit-pix').value.trim(),
+                vinculo: document.getElementById('edit-vinculo').value,
+                veiculo: document.getElementById('edit-veiculo').value.trim()
+            };
+            await fetch(`/api/fleet/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(body)
+            });
+            fecharModal('modal-edit');
+            carregarFrota();
+            showToast('Perfil atualizado');
+        }
+
+        let financeiroAtual = null;
+        async function abrirModalFinanceiro(id, nome, chavePix) {
+            financeiroAtual = id;
+            document.getElementById('fin-nome').innerText = nome;
+            document.getElementById('fin-chave-pix').innerText = chavePix || 'Não cadastrada';
+            document.getElementById('modal-financeiro').style.display = 'flex';
+            await carregarExtrato(id, chavePix, nome);
+        }
+
+        async function carregarExtrato(id, chavePix, nome) {
+            const res = await fetch(`/api/financeiro/${id}`);
+            const dados = await res.json();
+            document.getElementById('fin-qtd').innerText = dados.qtd;
+            document.getElementById('fin-entregas').innerText = `R$ ${dados.total_entregas.toFixed(2).replace('.', ',')}`;
+            document.getElementById('fin-deslocamento').innerText = `R$ ${dados.total_deslocamento.toFixed(2).replace('.', ',')}`;
+            document.getElementById('fin-total').innerText = `R$ ${dados.total_geral.toFixed(2).replace('.', ',')}`;
+            const containerPix = document.getElementById('pix-container');
+            const btnZerar = document.getElementById('btn-zerar-acerto');
+            const emptyState = document.getElementById('fin-empty-state');
+            if (dados.total_geral > 0) {
+                emptyState.style.display = 'none';
+                containerPix.style.display = 'flex';
+                btnZerar.style.display = 'block';
+                new QRious({ element: document.getElementById('qr-code-pix'), value: gerarPayloadPix(chavePix, dados.total_geral, nome), size: 200, level: 'M' });
+            } else {
+                emptyState.style.display = 'block';
+                containerPix.style.display = 'none';
+                btnZerar.style.display = 'none';
+            }
+        }
+
+        async function zerarAcerto() {
+            confirmarAcao("Confirma pagamento?", async () => {
+                const res = await fetch(`/api/financeiro/pagar/${financeiroAtual}`, { method: 'POST' });
+                fecharModal('modal-financeiro');
+                if (res.ok) {
+                    const btn = document.getElementById('btn-zerar-acerto');
+                    if (btn) { btn.textContent = '⏳ Aguardando confirmação...'; btn.disabled = true; }
+                    showToast('Pagamento registrado! Aguardando confirmação do motoboy.');
+                } else {
+                    showToast('Erro ao registrar pagamento.', 'error');
+                }
+            });
+        }
+
+        function fecharModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function abrirModalApi(tipo) {
+            const conteudo = {
+                google: { titulo: 'Google Maps (Radar e Rotas)', texto: 'Você já parou para pensar que está pagando comissão em cada pedido só para um aplicativo traçar uma rota no mapa? Ao plugar sua própria chave aqui, você acessa a tecnologia direto da fonte.<br><br><div style="background: #e0f2fe; border: 1px solid #bae6fd; padding: 12px; border-radius: 8px; color: #0369a1; font-size: 0.85rem;"><b>Como criar sua chave em 3 passos:</b><br><br><b>1.</b> Acesse o <a href="https://console.cloud.google.com/" target="_blank" style="color: #0284c7; font-weight: bold;">Google Cloud</a>, faça login e clique em "Criar Projeto".<br><b>2.</b> No menu, vá em "APIs e Serviços" > "Biblioteca". Você precisará buscar e <b>Ativar</b> 3 APIs específicas para o sistema funcionar:<br><ul style="margin: 6px 0 10px; padding-left: 20px;"><li><b>Maps JavaScript API</b> (Renderiza o mapa)</li><li><b>Places API</b> (Autocompleta endereços)</li><li><b>Geocoding API</b> (Transforma endereço em GPS)</li></ul><b>3.</b> Vá no menu "Credenciais", clique em "Criar Credenciais" > "Chave de API". Copie o código gerado e cole no nosso painel.</div>' },
+                openai: { titulo: 'OpenAI (Cérebro da IA)', texto: 'Sistemas de mercado cobram mensalidades de R$ 200 a R$ 500 por um módulo de IA. A verdade? Eles só estão revendendo a API do ChatGPT. Inserindo sua chave aqui, você paga o preço de fábrica (frações de centavos por mensagem) direto para a OpenAI. É o fim da mensalidade abusiva.' },
+                telegram: { titulo: 'Telegram Bot (Canal da Frota)', texto: 'Sua operação não pode parar porque o servidor da plataforma caiu no domingo. O Telegram te dá uma infraestrutura rápida, descentralizada e 100% gratuita. Seu sistema fala direto com o celular do seu motoboy, com criptografia e sem depender de painéis que travam na hora do rush.' },
+                whatsapp_gratuito: { titulo: 'WhatsApp Gratuito (QR Code)', texto: 'Essa opção usa uma tecnologia paralela que imita o WhatsApp Web. A vantagem? É 100% de graça. A desvantagem? O WhatsApp bloqueia números que mandam muitas mensagens automáticas por aqui. Se você escolher essa opção, RECOMENDAMOS FORTEMENTE que use um número de chip novo (secundário) só para o robô. Nunca coloque o número principal da loja aqui.' },
+
+            };
+            const item = conteudo[tipo];
+            if (!item) return;
+            document.getElementById('modal-help-api-titulo').textContent = item.titulo;
+            document.getElementById('modal-help-api-texto').innerHTML = item.texto;
+            document.getElementById('modal-help-api').style.display = 'flex';
+        }
+
+        function crc16(str) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < str.length; i++) {
+                crc ^= str.charCodeAt(i) << 8;
+                for (let j = 0; j < 8; j++) {
+                    if ((crc & 0x8000) > 0) crc = (crc << 1) ^ 0x1021;
+                    else crc = crc << 1;
+                }
+            }
+            return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        function gerarPayloadPix(chave, valor, nome) {
+            if(!chave) return "ERRO";
+            const valStr = valor.toFixed(2);
+            let payload = `00020101021126${(chave.length + 22).toString().padStart(2, '0')}0014br.gov.bcb.pix01${chave.length.toString().padStart(2, '0')}${chave}52040000530398654${valStr.length.toString().padStart(2, '0')}${valStr}5802BR59${nome.substring(0,25).length.toString().padStart(2, '0')}${nome.substring(0,25)}6009SAO PAULO62070503***6304`;
+            return payload + crc16(payload);
+        }
+
+        async function carregarPerfilInicial() {
+            const response = await fetch('/api/profile/admin?t=' + Date.now(), {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Falha ao carregar perfil: HTTP ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.toLowerCase().includes('application/json')) {
+                const rawText = await response.text();
+                throw new Error(`Resposta inválida em /api/profile/admin. Content-Type recebido: ${contentType}. Corpo: ${rawText.substring(0, 300)}`);
+            }
+
+            return await response.json();
+        }
+
+        async function mostrarChave(fieldId) {
+            try {
+                const res = await fetch('/api/profile/admin?t=' + Date.now(), { cache: 'no-store' });
+                const d = await res.json();
+                const map = {
+                    'prof-telegram-token': d.telegram_bot_token,
+                    'prof-google-maps-key': d.google_maps_key,
+                    'prof-openai-key': d.openai_key
+                };
+                const el = document.getElementById(fieldId);
+                const btn = document.getElementById('btn-mostrar-' + fieldId);
+                if (el && map[fieldId]) {
+                    el.value = map[fieldId];
+                    el.disabled = false;
+                    el.placeholder = '';
+                    if (btn) btn.style.display = 'none';
+                }
+            } catch(e) {
+                showToast('Erro ao revelar a chave.', 'error');
+            }
+        }
+
+        async function initApp() {
+            document.getElementById('btn-confirm-action').addEventListener('click', () => { fecharModal('modal-confirmacao'); if (acaoConfirmacao) acaoConfirmacao(); });
+
+            // Kill switch: exibe/oculta aviso ao clicar no toggle
+            const ksToggle = document.getElementById('prof-whatsapp-ativo');
+            if (ksToggle) ksToggle.addEventListener('change', function() {
+                document.getElementById('killswitch-aviso').style.display = this.checked ? 'none' : 'block';
+            });
+            carregarKanbanStorage();
+            carregarFrota();
+            connectWS();
+
+            try {
+                const d = await carregarPerfilInicial();
+
+                const setVal = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = val || '';
+                };
+
+                const setChk = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) el.checked = !!val;
+                };
+
+                setVal('prof-nome', d.nome);
+                setVal('prof-documento', d.documento);
+                setVal('prof-endereco', d.endereco);
+                setVal('prof-whatsapp', d.whatsapp);
+                setVal('prof-link-cardapio', d.link_cardapio);
+                const setChaveSegura = (id, valor) => {
+                    const el = document.getElementById(id);
+                    const btn = document.getElementById('btn-mostrar-' + id);
+                    if (!el) return;
+                    if (valor) {
+                        el.value = '';
+                        el.disabled = true;
+                        el.placeholder = 'Configurado ✓';
+                        if (btn) btn.style.display = 'inline-flex';
+                    } else {
+                        el.disabled = false;
+                        el.placeholder = '';
+                        if (btn) btn.style.display = 'none';
+                    }
+                };
+                setChaveSegura('prof-telegram-token', d.telegram_bot_token);
+                setChaveSegura('prof-google-maps-key', d.google_maps_key);
+                setChaveSegura('prof-openai-key', d.openai_key);
+
+                // Kill switch: ativo por padrão (null/undefined = ligado)
+                const wppAtivo = d.whatsapp_ativo === undefined || d.whatsapp_ativo === null || d.whatsapp_ativo === 1 || d.whatsapp_ativo === true;
+                setChk('prof-whatsapp-ativo', wppAtivo);
+                document.getElementById('killswitch-aviso').style.display = wppAtivo ? 'none' : 'block';
+
+                if (d.horarios) {
+                    ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'].forEach(dia => {
+                        if(d.horarios[dia]) {
+                            setChk(`dia-${dia}`, d.horarios[dia].on);
+                            setVal(`hora-${dia}-abre`, d.horarios[dia].abre);
+                            setVal(`hora-${dia}-fecha`, d.horarios[dia].fecha);
+                        }
+                    });
+                }
+
+                if (d.google_maps_key) {
+                    carregarScriptMapa(d.google_maps_key);
+                }
+
+
+            } catch(e) {
+                console.error('Erro ao preencher formulário:', e);
+                showToast('Não foi possível carregar os dados do QG Logístico.', 'error');
+            }
+        }
+
+        window.onload = async () => {
+            try {
+                const res = await fetch('/auth/check');
+                if (res.ok) { await initApp(); return; }
+            } catch(e) {}
+
+            // Verifica se é primeira execução
+            try {
+                const res = await fetch('/auth/setup-needed');
+                const data = await res.json();
+                if (data.needed) { showSetupScreen(); return; }
+            } catch(e) {}
+
+            showLoginScreen();
+        };
+
+        document.addEventListener('click', (ev) => {
+            const a = ev.target.closest('a[target="_blank"]');
+            if (a && navigator.userAgent.toLowerCase().includes('electron')) {
+                ev.preventDefault();
+                window.require("electron").shell.openExternal(a.href);
+            }
+        });
+
+        // ===================== NUVEM =====================
+
+        // Armazena dados extras dos motoboys parceiros (taxa, no_nome etc.)
+        const _nuvemCards = {};
+
+        // Cache da frota atual (usado por abrirDadosNuvem)
+        let _frotaAtual = [];
+
+        // Pacote que está sendo despachado via nuvem (referência do modal-despacho)
+        let _pacoteParaNuvem = null;
+
+        function abrirDadosNuvem(telegramId) {
+            const moto = _frotaAtual.find(m => m.telegram_id === telegramId);
+            if (!moto) return;
+            abrirModalNuvemDados({ ...moto, _nuvem: _nuvemCards[moto.telegram_id] || {} });
+        }
+
+        async function cancelarNuvem(id, status) {
+            if (status === 'EM_ROTA') {
+                alert('Cancelamento bloqueado: motoboy em rota.');
+                return;
+            }
+            if (!confirm('Remover este parceiro Nuvem da frota?')) return;
+            await fetch('/api/fleet/' + id, { method: 'DELETE' });
+            delete _nuvemCards[id];
+            carregarFrota();
+            showToast('Parceiro removido da frota.', 'success');
+        }
+
+        async function buscarNaNuvem() {
+            const listaEl = document.getElementById('lista-nuvem-disponiveis');
+            listaEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-light);">Consultando parceiros...</p>';
+            try {
+                const res = await fetch('/api/frota-compartilhada/buscar');
+                if (!res.ok) throw new Error();
+                const lista = await res.json();
+                if (!lista.length) {
+                    listaEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-light);">Nenhum parceiro disponível no momento.</p>';
+                    return;
+                }
+                listaEl.innerHTML = lista.map((m, i) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#faf5ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px 12px;">
+                        <div>
+                            <div style="font-weight:600; font-size:0.88rem;">${m.nome}</div>
+                            <div style="font-size:0.75rem; color:var(--text-light);">${m.veiculo || '-'} &bull; ${m.no_nome} &bull; ${m.distancia_km.toFixed(1)} km</div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                            <span style="font-family:var(--font-mono); font-weight:700; color:#7c3aed; font-size:0.82rem;">R$ ${m.taxa_deslocamento_brl.toFixed(2)}</span>
+                            <button class="btn-create" style="font-size:0.75rem; padding:5px 10px; background:#7c3aed;" onclick="convidarNuvem(${i})">Convidar</button>
+                        </div>
+                    </div>
+                `).join('');
+                // Salva lista para uso no convidarNuvem
+                window._listaResultadosNuvem = lista;
+            } catch(e) {
+                listaEl.innerHTML = '<p style="font-size:0.8rem; color:#b91c1c;">Falha ao buscar parceiros.</p>';
+            }
+        }
+
+        async function convidarNuvem(idx) {
+            const m = (window._listaResultadosNuvem || [])[idx];
+            if (!m) return;
+
+            // Obtém o pacote atual do modal-despacho
+            const pacoteId = _pacoteParaNuvem || pacoteSelecionadoParaDespacho;
+            if (!pacoteId) return showToast('Abra o despacho de um pacote antes de convidar.', 'error');
+
+            let pedidosDoPacote = [];
+            try {
+                const resPacotes = await fetch('/api/pacotes');
+                const pacotes = await resPacotes.json();
+                const pacote = pacotes.find(p => p.id === pacoteId);
+                if (pacote) {
+                    const resPedidos = await fetch('/api/pedidos');
+                    const todos = await resPedidos.json();
+                    pedidosDoPacote = todos.filter(p => pacote.pedidosIds?.includes(p.id));
+                }
+            } catch(e) {}
+
+            try {
+                const res = await fetch('/api/frota-compartilhada/convidar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km })
+                });
+                if (!res.ok) { const d = await res.json(); return showToast(d.error || 'Erro ao convidar.', 'error'); }
+
+                // Salva dados extras para exibir no card da frota
+                _nuvemCards[m.telegram_id] = { no_nome: m.no_nome, no_url: m.no_url, taxa: m.taxa_deslocamento_brl, distancia_km: m.distancia_km };
+
+                fecharModal('modal-despacho');
+                showToast(`Convite enviado para ${m.nome}!`, 'success');
+                carregarFrota();
+            } catch(e) {
+                showToast('Falha de conexão.', 'error');
+            }
+        }
+
+        function abrirModalMotoboyNuvem(moto) {
+            const dados = _nuvemCards[moto.telegram_id] || {};
+            document.getElementById('nuvem-modal-nome').textContent = moto.nome || '-';
+            document.getElementById('nuvem-modal-veiculo').textContent = moto.veiculo || '-';
+            document.getElementById('nuvem-modal-distancia').textContent = dados.distancia_km ? dados.distancia_km.toFixed(1) + ' km' : '-';
+            document.getElementById('nuvem-modal-taxa').textContent = dados.taxa ? 'R$ ' + Number(dados.taxa).toFixed(2) : '-';
+            document.getElementById('nuvem-modal-no').textContent = dados.no_nome || '-';
+            document.getElementById('modal-motoboy-nuvem').dataset.telegramId = moto.telegram_id;
+            document.getElementById('modal-motoboy-nuvem').style.display = 'flex';
+        }
+
+        function abrirModalNuvemDados(moto) {
+            const dados = moto._nuvem || _nuvemCards[moto.telegram_id] || {};
+
+            document.getElementById('nuvem-edit-id').value = moto.telegram_id;
+            document.getElementById('nuvem-no-origem').textContent = dados.no_nome || '-';
+            document.getElementById('nuvem-edit-nome').value = moto.nome || '';
+            document.getElementById('nuvem-edit-whatsapp').value = moto.whatsapp || moto.telefone || '-';
+            document.getElementById('nuvem-edit-pix').value = moto.pix || '';
+            document.getElementById('nuvem-edit-veiculo').value = moto.veiculo || '';
+
+            const taxaEntrega = Number(moto.taxa_entrega || 0);
+            const taxaDeslocamento = Number(dados.taxa || moto.taxa_deslocamento || 0);
+            const total = taxaEntrega + taxaDeslocamento;
+
+            const fmt = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+            document.getElementById('nuvem-taxa-entrega').textContent = fmt(taxaEntrega);
+            document.getElementById('nuvem-taxa-deslocamento').textContent = fmt(taxaDeslocamento);
+            document.getElementById('nuvem-total').textContent = fmt(total);
+
+            const chave = moto.pix || '';
+            document.getElementById('nuvem-chave-pix-label').textContent = chave;
+            if (chave && typeof QRious !== 'undefined') {
+                new QRious({ element: document.getElementById('qr-nuvem'), value: chave, size: 160 });
+            }
+
+            document.getElementById('modal-nuvem-dados').style.display = 'flex';
+        }
+
+        async function cancelarEntregaNuvem(telegramId) {
+            const id = telegramId || document.getElementById('modal-motoboy-nuvem').dataset.telegramId;
+            if (!id) return;
+            confirmarAcao('Cancelar a entrega deste parceiro Nuvem e removê-lo da frota?', async () => {
+                await fetch(`/api/fleet/${id}`, { method: 'DELETE' });
+                delete _nuvemCards[id];
+                fecharModal('modal-motoboy-nuvem');
+                carregarFrota();
+                showToast('Parceiro removido da frota.', 'success');
+            });
+        }
+
+        async function abrirHistoricoParceiros() {
+            const lista = document.getElementById('lista-historico-parceiros');
+            lista.innerHTML = '<p style="color:var(--text-light); font-size:0.85rem;">Carregando...</p>';
+            document.getElementById('modal-historico-parceiros').style.display = 'flex';
+            try {
+                const res = await fetch('/api/frota-compartilhada/historico');
+                if (!res.ok) throw new Error();
+                const itens = await res.json();
+                if (!itens.length) {
+                    lista.innerHTML = '<p style="color:var(--text-light); font-size:0.85rem; text-align:center; padding:20px 0;">Nenhum registro encontrado.</p>';
+                    return;
+                }
+                lista.innerHTML = itens.map(item => {
+                    const data = new Date(item.data_criacao || item.data).toLocaleString('pt-BR');
+                    return `<div style="background:#faf5ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:0.85rem; font-weight:600; color:#7c3aed;">☁️ ${item.descricao || item.mensagem || '-'}</div>
+                            <div style="font-size:0.75rem; color:var(--text-light); margin-top:2px;">${data}</div>
+                        </div>
+                        ${item.valor != null ? `<div style="font-family:var(--font-mono); font-weight:700; color:#7c3aed;">R$ ${Number(item.valor).toFixed(2)}</div>` : ''}
+                    </div>`;
+                }).join('');
+            } catch(e) {
+                lista.innerHTML = '<p style="color:#b91c1c; font-size:0.85rem;">Erro ao carregar histórico.</p>';
+            }
+        }
+
+        async function encerrarAtendimentoSAC() {
+            if (jidSACAtual) {
+                try {
+                    await fetch('/api/sac/encerrar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jid: jidSACAtual })
+                    });
+                } catch(e) {
+                    console.error('Erro ao encerrar SAC:', e);
+                }
+            }
+            jidSACAtual = null;
+            document.getElementById('chat-history-sac').innerHTML = '';
+            fecharModal('modal-chat-sac');
+        }
+
+        async function gerarQRDespacho() {
+            if (!_pacoteParaDespacho || !_motoboyParaDespacho) return;
+            try {
+                const res = await fetch('/api/operacao/gerar-qr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pacoteId: _pacoteParaDespacho,
+                        motoboy: _motoboyParaDespacho
+                    })
+                });
+                const data = await res.json();
+                if (data.qrBase64) {
+                    const img = document.createElement('img');
+                    img.src = data.qrBase64;
+                    img.style.cssText = 'width:200px;height:200px;display:block;margin:10px auto;border-radius:8px;';
+                    const container = document.getElementById('qr-despacho-container')
+                        || (() => {
+                            const d = document.createElement('div');
+                            d.id = 'qr-despacho-container';
+                            d.style.textAlign = 'center';
+                            document.querySelector('#modal-despacho .modal-card').appendChild(d);
+                            return d;
+                        })();
+                    container.innerHTML = '';
+                    container.appendChild(img);
+                    const link = document.createElement('p');
+                    link.style.cssText = 'font-size:0.75rem;color:var(--text-light);margin-top:5px;';
+                    link.textContent = 'Mostre este QR para o motoboy escanear';
+                    container.appendChild(link);
+                }
+            } catch(e) {
+                showToast('Erro ao gerar QR Code', 'error');
+            }
+        }
+
+        // ===================== /NUVEM =====================
+
+    </script>
+</body>
+</html>

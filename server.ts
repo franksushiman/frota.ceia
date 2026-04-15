@@ -4,7 +4,6 @@ import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -23,8 +22,6 @@ import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } 
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const HUB_URL = process.env.HUB_URL;
 const LOJA_URL = process.env.LOJA_URL ?? '';
@@ -733,8 +730,7 @@ async function aceitar(){
         const loja_nome = config?.nome || 'Loja Parceira';
         const bot_username = config?.telegram_bot_token ? 'bot' : null;
 
-        const pedidos_resumo = (pedidos || []).map((p: any) => `${p.nomeCliente} \u2014 ${p.endereco}`).join('\\
-');
+        const pedidos_resumo = (pedidos || []).map((p: any) => `${p.nomeCliente} \u2014 ${p.endereco}`).join('\n');
         const taxa_entrega = (pedidos || []).reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
         const taxa_desl = taxa_deslocamento_brl || 0;
         const valor_total = taxa_desl + taxa_entrega;
