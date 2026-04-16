@@ -11,6 +11,8 @@ const PORT = 3000;
 let serverProcess = null;
 let mainWindow = null;
 
+const logFile = path.join(require('os').homedir(), 'ceia_crash.log');
+
 function findNodeBin() {
     if (process.env.CEIA_NODE_BIN) return process.env.CEIA_NODE_BIN;
 
@@ -140,10 +142,13 @@ function startServer() {
         if (fs.existsSync(envPath)) args.unshift('--env-file=' + envPath);
     }
 
+    fs.writeFileSync(logFile, '[' + new Date().toISOString() + '] CMD: ' + cmd + '\n[ARGS] ' + JSON.stringify(args) + '\n[CWD] ' + spawnRoot + '\n\n');
+
     serverProcess = spawn(cmd, args, { cwd: spawnRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    serverProcess.stdout.on('data', d => process.stdout.write('[CEIA] ' + d));
-    serverProcess.stderr.on('data', d => process.stderr.write('[CEIA] ' + d));
-    
+    serverProcess.stdout.on('data', data => { process.stdout.write('[CEIA] ' + data); fs.appendFileSync(logFile, data.toString()); });
+    serverProcess.stderr.on('data', data => { process.stderr.write('[CEIA] ' + data); fs.appendFileSync(logFile, data.toString()); });
+    serverProcess.on('exit', code => fs.appendFileSync(logFile, '\nExit code: ' + code));
+
     serverProcess.on('error', err => {
         dialog.showErrorBox('Erro ao iniciar', err.message);
         app.quit();
