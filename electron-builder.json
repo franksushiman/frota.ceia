@@ -30,7 +30,7 @@
         ]
       }
     ],
-    "icon": "electron/icons/png/icon.png",
+    "icon": "electron/icons/linux",
     "category": "public.app-category.business",
     "maintainer": "CEIA <contato@ceia.ia.br>",
     "vendor": "CEIA"
