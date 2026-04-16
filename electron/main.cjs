@@ -6,6 +6,9 @@ const http = require('http');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
+// Garante instância única — se já houver uma rodando, foca ela e sai
+if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
+
 const isDev = !app.isPackaged;
 const PORT = 3000;
 let serverProcess = null;
@@ -220,6 +223,14 @@ function createWindow() {
         }
     });
 }
+
+// Segunda instância tentando abrir: foca a janela existente
+app.on('second-instance', () => {
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+});
 
 app.whenReady().then(() => {
     ipcMain.handle('open-external', (_event, url) => {
