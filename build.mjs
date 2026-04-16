@@ -30,7 +30,7 @@ await build({
 copyFileSync(join(_dirname, 'index.html'), join(_dirname, 'dist', 'index.html'));
 console.log('📄 index.html copiado para dist/');
 
-const shouldObfuscate = process.env.CI === 'true' || process.argv.includes('--obfuscate');
+const shouldObfuscate = process.argv.includes('--obfuscate');
 if (shouldObfuscate) {
     console.log('🔒 Ofuscando código...');
     const { default: JavaScriptObfuscator } = await import('javascript-obfuscator');
