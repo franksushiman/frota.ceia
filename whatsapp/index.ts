@@ -14,7 +14,12 @@ const providerState: ProviderState = {
 const provider = new BaileysProvider();
 
 export async function iniciarWhatsApp(): Promise<void> {
-    await provider.connect(providerState);
+    try {
+        await provider.connect(providerState);
+    } catch (err) {
+        console.error('[WhatsApp] Falha ao iniciar Baileys (servidor continua rodando):', err);
+        providerState.setStatus('ERROR');
+    }
 }
 
 export async function enviarMensagemWhatsApp(
