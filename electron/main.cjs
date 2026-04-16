@@ -150,7 +150,10 @@ app.whenReady().then(() => {
     waitForServer(45000).then(() => {
         createWindow();
         if (app.isPackaged) {
-            autoUpdater.checkForUpdatesAndNotify();
+            try { autoUpdater.checkForUpdatesAndNotify(); } catch (_) {}
+            autoUpdater.on('error', (err) => {
+                if (!String(err).includes('404')) console.error('autoUpdater error:', err);
+            });
             autoUpdater.on('update-available', () => {
                 dialog.showMessageBox(mainWindow, {
                     type: 'info', title: 'Atualização disponível',
