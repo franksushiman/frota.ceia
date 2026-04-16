@@ -146,6 +146,9 @@ app.whenReady().then(() => {
     });
 
     ensureUserData();
+    const { dbPath, authPath } = getUserDataPaths();
+    process.env.DB_PATH   = dbPath;
+    process.env.AUTH_PATH = authPath;
     startServer();
     waitForServer(120000).then(() => {
         createWindow();
