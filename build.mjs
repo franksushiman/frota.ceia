@@ -17,10 +17,14 @@ await build({
     entryPoints: [join(_dirname, 'index.ts')],
     bundle:      true,
     platform:    'node',
-    target:      'node20',
+    target:      'node18',
     format:      'cjs',
     outfile,
-    packages:    'external',
+    // sqlite3 tem binário nativo (.node) — não pode ser embutido.
+    // Todos os outros pacotes (incluindo baileys ESM-only) são embutidos
+    // inline aqui em tempo de build, eliminando a dependência da versão
+    // do Node instalada no sistema do lojista.
+    external:    ['sqlite3'],
     sourcemap:   false,
     minify:      false,
     logLevel:    'info',
