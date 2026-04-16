@@ -16,37 +16,60 @@ function findNodeBin() {
 
     const os = require('os');
     const home = os.homedir();
-    const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
+    const isWin = process.platform === 'win32';
 
+    if (isWin) {
+        const candidates = [
+            // instalação padrão do Node no Windows
+            'C:\\Program Files\\nodejs\\node.exe',
+            'C:\\Program Files (x86)\\nodejs\\node.exe',
+            // nvm-windows: symlink padrão
+            path.join(process.env.APPDATA || '', 'nvm', 'nodejs', 'node.exe'),
+            path.join(process.env.NVM_SYMLINK || 'C:\\Program Files\\nodejs', 'node.exe'),
+            // volta para PATH via where
+        ];
+        for (const c of candidates) {
+            try { if (fs.existsSync(c)) return c; } catch (_) {}
+        }
+        try {
+            const { execSync } = require('child_process');
+            return execSync('where node', { encoding: 'utf8', shell: 'cmd.exe' }).trim().split('\r\n')[0];
+        } catch (_) {}
+        return 'node.exe';
+    }
+
+    const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
     const candidates = [
         '/usr/bin/node',
         '/usr/local/bin/node',
-        '/opt/homebrew/bin/node',
+        '/opt/homebrew/bin/node',           // Mac Apple Silicon (Homebrew)
+        '/usr/local/opt/node/bin/node',      // Mac Intel (Homebrew cellar)
         path.join(home, '.local', 'bin', 'node'),
     ];
 
-    // NVM: tenta versões instaladas (mais recente primeiro)
+    // NVM alias default (mais confiável — aponta direto para a versão ativa)
+    try {
+        const alias = fs.readFileSync(path.join(nvmDir, 'alias', 'default'), 'utf8').trim();
+        const resolved = fs.readlinkSync
+            ? path.join(nvmDir, 'versions', 'node', alias, 'bin', 'node')
+            : null;
+        if (resolved) candidates.unshift(resolved);
+    } catch (_) {}
+
+    // NVM: todas as versões instaladas (mais recente primeiro)
     try {
         const versions = fs.readdirSync(path.join(nvmDir, 'versions', 'node')).reverse();
         for (const v of versions)
             candidates.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'node'));
     } catch (_) {}
 
-    // NVM: alias default
-    try {
-        const alias = fs.readFileSync(path.join(nvmDir, 'alias', 'default'), 'utf8').trim();
-        candidates.unshift(path.join(nvmDir, 'versions', 'node', alias, 'bin', 'node'));
-    } catch (_) {}
-
     for (const c of candidates) {
         try { if (fs.existsSync(c)) return c; } catch (_) {}
     }
 
-    // último recurso: which/where
     try {
         const { execSync } = require('child_process');
-        const cmd = process.platform === 'win32' ? 'where node' : 'which node';
-        return execSync(cmd, { encoding: 'utf8' }).trim().split('\n')[0];
+        return execSync('which node', { encoding: 'utf8' }).trim();
     } catch (_) {}
 
     return 'node';
@@ -101,7 +124,9 @@ function startServer() {
     // spawn() é uma syscall nativa e não consegue acessar caminhos dentro do .asar.
     // Em produção, usamos app.asar.unpacked onde os arquivos existem no filesystem real.
     const spawnRoot = isDev ? appRoot : appRoot.replace('app.asar', 'app.asar.unpacked');
-    const extraPaths = ['/usr/local/bin', '/usr/bin', '/bin', '/opt/homebrew/bin'];
+    const extraPaths = process.platform === 'win32'
+        ? ['C:\\Program Files\\nodejs', path.join(process.env.APPDATA || '', 'nvm', 'nodejs')]
+        : ['/usr/local/bin', '/usr/bin', '/bin', '/opt/homebrew/bin', '/usr/local/opt/node/bin'];
     const envPATH = [...extraPaths, process.env.PATH || ''].join(path.delimiter);
     const env = { ...process.env, PATH: envPATH, DB_PATH: dbPath, AUTH_PATH: authPath, PORT: String(PORT) };
 
@@ -222,6 +247,9 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// Mac: recriar janela ao clicar no ícone do Dock com app já aberto
+app.on('activate', () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); });
 
 app.on('will-quit', () => {
     if (serverProcess) {
