@@ -22,14 +22,7 @@
     "package.json"
   ],
   "linux": {
-    "target": [
-      {
-        "target": "deb",
-        "arch": [
-          "x64"
-        ]
-      }
-    ],
+    "target": ["deb", "AppImage"],
     "icon": "electron/icons/linux",
     "category": "public.app-category.business",
     "maintainer": "CEIA <contato@ceia.ia.br>",
