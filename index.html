@@ -425,7 +425,7 @@
                 <input type="text" id="chat-input-sos" class="form-control" placeholder="Digite a instrução para o motoboy..." style="flex: 1; margin-bottom: 0;">
                 <button class="btn" style="width: auto; padding: 0 20px;" onclick="enviarMensagemSOS()">Enviar</button>
             </div>
-            <button class="btn btn-del" style="margin-top: 15px;" onclick="telegramIdSOSAtual = null; document.getElementById('chat-history-sos').innerHTML = ''; fecharModal('modal-chat-sos');">Encerrar Conversa de Emergência</button>
+            <button class="btn btn-del" style="margin-top: 15px;" onclick="encerrarSOSOperador()">Encerrar Conversa de Emergência</button>
         </div>
     </div>
 
@@ -710,6 +710,17 @@
         function abrirModalSOS() {
             document.getElementById('sos-banner').style.display = 'none';
             document.getElementById('modal-chat-sos').style.display = 'flex';
+        }
+
+        async function encerrarSOSOperador() {
+            try {
+                await fetch('/api/operacao/sos/encerrar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: telegramIdSOSAtual })
+                });
+            } catch (e) {}
+            // O broadcast SOS_ENCERRADO via WebSocket vai limpar o banner e o modal
         }
 
         function abrirModalSAC() {
@@ -1281,12 +1292,26 @@
 
             try {
                 const pedidosDoPacote = pac.pedidosIds.map(pid => pedidos.find(p => p.id === pid));
-                await fetch('/api/operacao/despachar', {
+                const res = await fetch('/api/operacao/despachar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pacoteId: pac.id, motoboy: motoboy, pedidos: pedidosDoPacote })
                 });
-            } catch (e) {}
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    pac.status = 'AGUARDANDO'; pac.motoboy = null;
+                    fecharModal('modal-despacho');
+                    salvarKanbanStorage(); renderizarKanban();
+                    showToast(err.error || 'Falha ao despachar. Verifique o servidor.', 'error');
+                    return;
+                }
+            } catch (e) {
+                pac.status = 'AGUARDANDO'; pac.motoboy = null;
+                fecharModal('modal-despacho');
+                salvarKanbanStorage(); renderizarKanban();
+                showToast('Sem conexão com o servidor.', 'error');
+                return;
+            }
 
             fecharModal('modal-despacho');
             salvarKanbanStorage();

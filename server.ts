@@ -251,30 +251,28 @@ export async function startServer() {
         const { pacoteId, motoboy, pedidos } = request.body;
 
         const config = await getConfiguracoes();
-        if (!config.openai_key) {
-            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Chave OpenAI n\u00e3o configurada no QG Log\u00edstico.' });
-        }
 
-        let resumoBairros;
-        try {
-            const allEnderecos = pedidos.map((p: any) => p.endereco).join('\n');
-            const resOpenAI = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.openai_key}` },
-                body: JSON.stringify({
-                    model: 'gpt-4o-mini',
-                    messages: [{ role: 'user', content: `Resuma os bairros destes endere\u00e7os em no m\u00e1ximo 4 palavras:\\
-\\
-${allEnderecos}` }],
-                    max_tokens: 20
-                })
-            });
-            if (!resOpenAI.ok) throw new Error('Falha na API OpenAI');
-            const data = await resOpenAI.json();
-            resumoBairros = data.choices[0].message.content.trim();
-        } catch (e) {
-            console.error('FALHA NA OPENAI:', e);
-            return reply.code(500).type('application/json; charset=utf-8').send({ error: 'A IA n\u00e3o conseguiu analisar os endere\u00e7os desta rota.' });
+        // Resumo via IA é opcional — se não tiver key ou a API falhar, usa endereços diretos
+        let resumoBairros = pedidos.map((p: any) => p.endereco).join(', ').slice(0, 80);
+        if (config.openai_key) {
+            try {
+                const allEnderecos = pedidos.map((p: any) => p.endereco).join('\n');
+                const resOpenAI = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.openai_key}` },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: `Resuma os bairros destes endereços em no máximo 4 palavras:\n\n${allEnderecos}` }],
+                        max_tokens: 20
+                    })
+                });
+                if (resOpenAI.ok) {
+                    const data = await resOpenAI.json();
+                    resumoBairros = data.choices[0].message.content.trim();
+                }
+            } catch (e) {
+                console.error('FALHA NA OPENAI (usando endereços diretos):', e);
+            }
         }
 
         const totalTaxa = pedidos.reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
@@ -452,6 +450,15 @@ async function aceitar(){
     app.post('/api/operacao/sos/reply', async (request: any, reply) => {
         const { telegram_id, texto } = request.body;
         await enviarMensagemTelegram(telegram_id, texto);
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+    });
+
+    app.post('/api/operacao/sos/encerrar', async (request: any, reply) => {
+        const { telegram_id } = request.body;
+        if (telegram_id) {
+            await enviarMensagemTelegram(telegram_id, '✅ Emergência encerrada pela base. Pode continuar operando normalmente.');
+        }
+        await broadcastLog('SOS_ENCERRADO', '', { telegram_id: telegram_id || '' });
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
