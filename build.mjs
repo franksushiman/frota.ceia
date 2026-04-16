@@ -25,6 +25,9 @@ await build({
     // inline aqui em tempo de build, eliminando a dependência da versão
     // do Node instalada no sistema do lojista.
     external:    ['sqlite3'],
+    // Polyfill para Node v18: globalThis.crypto não é exposto globalmente
+    // por padrão antes do Node v19. Esta linha garante compatibilidade.
+    banner:      { js: `if (!globalThis.crypto) { try { const { webcrypto } = require('node:crypto'); globalThis.crypto = webcrypto; } catch(_) {} }` },
     sourcemap:   false,
     minify:      false,
     logLevel:    'info',

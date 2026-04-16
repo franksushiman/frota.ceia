@@ -41,31 +41,39 @@ function findNodeBin() {
     }
 
     const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
-    const candidates = [
-        '/usr/bin/node',
+
+    // NVM: candidatos com prioridade máxima (versões mais novas primeiro)
+    const nvmCandidates = [];
+    try {
+        // Alias default pode ser "v22", "v22.21.0", "lts/iron" etc.
+        const alias = fs.readFileSync(path.join(nvmDir, 'alias', 'default'), 'utf8').trim();
+        nvmCandidates.push(path.join(nvmDir, 'versions', 'node', alias, 'bin', 'node'));
+    } catch (_) {}
+    try {
+        // Todas as versões instaladas, ordenadas por semver decrescente
+        const versions = fs.readdirSync(path.join(nvmDir, 'versions', 'node'))
+            .sort((a, b) => {
+                const pa = a.replace(/^v/, '').split('.').map(Number);
+                const pb = b.replace(/^v/, '').split('.').map(Number);
+                for (let i = 0; i < 3; i++) {
+                    if ((pa[i] || 0) !== (pb[i] || 0)) return (pb[i] || 0) - (pa[i] || 0);
+                }
+                return 0;
+            });
+        for (const v of versions)
+            nvmCandidates.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'node'));
+    } catch (_) {}
+
+    // Caminhos do sistema — usados só se nvm não encontrar nada
+    const systemCandidates = [
         '/usr/local/bin/node',
-        '/opt/homebrew/bin/node',           // Mac Apple Silicon (Homebrew)
-        '/usr/local/opt/node/bin/node',      // Mac Intel (Homebrew cellar)
+        '/opt/homebrew/bin/node',
+        '/usr/local/opt/node/bin/node',
         path.join(home, '.local', 'bin', 'node'),
+        '/usr/bin/node',                     // último recurso (geralmente LTS antigo do apt)
     ];
 
-    // NVM alias default (mais confiável — aponta direto para a versão ativa)
-    try {
-        const alias = fs.readFileSync(path.join(nvmDir, 'alias', 'default'), 'utf8').trim();
-        const resolved = fs.readlinkSync
-            ? path.join(nvmDir, 'versions', 'node', alias, 'bin', 'node')
-            : null;
-        if (resolved) candidates.unshift(resolved);
-    } catch (_) {}
-
-    // NVM: todas as versões instaladas (mais recente primeiro)
-    try {
-        const versions = fs.readdirSync(path.join(nvmDir, 'versions', 'node')).reverse();
-        for (const v of versions)
-            candidates.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'node'));
-    } catch (_) {}
-
-    for (const c of candidates) {
+    for (const c of [...nvmCandidates, ...systemCandidates]) {
         try { if (fs.existsSync(c)) return c; } catch (_) {}
     }
 
