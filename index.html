@@ -178,7 +178,7 @@
         💬 <span id="sac-text"></span> (Clique para atender)
     </div>
 
-    <audio id="beep-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+    <!-- áudio gerado via Web Audio API — sem URL externa, sem bloqueio de CSP -->
 
     <div class="sidebar">
         <div class="logo-container">frota<span class="logo-dot">.</span>ceia</div>
@@ -684,6 +684,28 @@
 
         let telegramIdSOSAtual = null;
         let jidSACAtual = null;
+
+        // Gera beep via Web Audio API — sem dependência externa, sem bloqueio de CSP
+        function playBeep(repeticoes = 1) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                let startTime = ctx.currentTime;
+                for (let i = 0; i < repeticoes; i++) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(880, startTime);
+                    osc.frequency.setValueAtTime(440, startTime + 0.15);
+                    gain.gain.setValueAtTime(0.4, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.35);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.35);
+                    startTime += 0.45;
+                }
+            } catch (e) { console.log('Web Audio não disponível:', e); }
+        }
 
         function abrirModalSOS() {
             document.getElementById('sos-banner').style.display = 'none';
@@ -1495,8 +1517,7 @@
                         hist.innerHTML += `<div style="align-self: flex-start; background: #ef4444; color: white; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 0.85rem;"><b>Motoboy:</b> ${log.mensagem}</div>`;
                         hist.scrollTop = hist.scrollHeight;
 
-                        const beep = document.getElementById('beep-sound');
-                        beep.play().catch(e => console.log('Áudio bloqueado'));
+                        playBeep(3); // SOS — 3 bipes urgentes
                     }
                     else if (log.tipo === 'SOS_ENCERRADO') {
                         telegramIdSOSAtual = null;
@@ -1508,7 +1529,7 @@
                         jidSACAtual = log.jid;
                         document.getElementById('sac-text').innerText = log.mensagem;
                         document.getElementById('sac-banner').style.display = 'block';
-                        document.getElementById("beep-sound").play();
+                        playBeep(1);
                     }
                     else if (log.tipo === 'SAC_MSG') {
                         jidSACAtual = log.jid;
@@ -1535,7 +1556,7 @@
                             pac.motoboy = null;
                             salvarKanbanStorage();
                             renderizarKanban();
-                            document.getElementById("beep-sound").play();
+                            playBeep(1);
                         }
                     }
                     else if (log.tipo === 'BAIXA_PEDIDO') {
