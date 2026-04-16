@@ -11,6 +11,47 @@ const PORT = 3000;
 let serverProcess = null;
 let mainWindow = null;
 
+function findNodeBin() {
+    if (process.env.CEIA_NODE_BIN) return process.env.CEIA_NODE_BIN;
+
+    const os = require('os');
+    const home = os.homedir();
+    const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
+
+    const candidates = [
+        '/usr/bin/node',
+        '/usr/local/bin/node',
+        '/opt/homebrew/bin/node',
+        path.join(home, '.local', 'bin', 'node'),
+    ];
+
+    // NVM: tenta versões instaladas (mais recente primeiro)
+    try {
+        const versions = fs.readdirSync(path.join(nvmDir, 'versions', 'node')).reverse();
+        for (const v of versions)
+            candidates.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'node'));
+    } catch (_) {}
+
+    // NVM: alias default
+    try {
+        const alias = fs.readFileSync(path.join(nvmDir, 'alias', 'default'), 'utf8').trim();
+        candidates.unshift(path.join(nvmDir, 'versions', 'node', alias, 'bin', 'node'));
+    } catch (_) {}
+
+    for (const c of candidates) {
+        try { if (fs.existsSync(c)) return c; } catch (_) {}
+    }
+
+    // último recurso: which/where
+    try {
+        const { execSync } = require('child_process');
+        const cmd = process.platform === 'win32' ? 'where node' : 'which node';
+        return execSync(cmd, { encoding: 'utf8' }).trim().split('\n')[0];
+    } catch (_) {}
+
+    return 'node';
+}
+
 function getUserDataPaths() {
     const userData = app.getPath('userData');
     return {
@@ -60,14 +101,16 @@ function startServer() {
     // spawn() é uma syscall nativa e não consegue acessar caminhos dentro do .asar.
     // Em produção, usamos app.asar.unpacked onde os arquivos existem no filesystem real.
     const spawnRoot = isDev ? appRoot : appRoot.replace('app.asar', 'app.asar.unpacked');
-    const env = { ...process.env, DB_PATH: dbPath, AUTH_PATH: authPath, PORT: String(PORT) };
+    const extraPaths = ['/usr/local/bin', '/usr/bin', '/bin', '/opt/homebrew/bin'];
+    const envPATH = [...extraPaths, process.env.PATH || ''].join(path.delimiter);
+    const env = { ...process.env, PATH: envPATH, DB_PATH: dbPath, AUTH_PATH: authPath, PORT: String(PORT) };
 
     let cmd, args;
     if (isDev) {
         cmd = path.join(appRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
         args = ['--env-file=' + path.join(appRoot, '.env'), path.join(appRoot, 'index.ts')];
     } else {
-        cmd = process.env.CEIA_NODE_BIN || 'node';
+        cmd = findNodeBin();
         args = [path.join(spawnRoot, 'dist', 'server.cjs')];
         if (fs.existsSync(envPath)) args.unshift('--env-file=' + envPath);
     }
