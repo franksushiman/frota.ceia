@@ -6,20 +6,13 @@ process.on('uncaughtException', (err) => {
 });
 
 import { startServer } from './server';
-import { initDatabase } from './database';
 import { iniciarWhatsApp } from './whatsapp/index';
 
 async function bootstrap() {
     try {
         console.log('--- INICIANDO SISTEMA CEIA ---');
-        
-        // 1. PRIMEIRO o banco
-        await initDatabase();
-        iniciarWhatsApp();
-        
-        // 2. DEPOIS o servidor
-        await startServer();
-        
+        await startServer();         // sobe o servidor (inclui initDatabase internamente)
+        iniciarWhatsApp();           // WhatsApp só após o servidor estar no ar
         console.log('✅ Tudo pronto e operando!');
     } catch (error) {
         console.error('FALHA CRÍTICA NO BOOTSTRAP:', error);

@@ -80,7 +80,13 @@ export class BaileysProvider implements WhatsAppProvider {
         }
 
         const { state: authState, saveCreds } = await useMultiFileAuthState(process.env.AUTH_PATH || 'auth_info_baileys');
-        const { version } = await fetchLatestBaileysVersion();
+        const FALLBACK_VERSION: [number, number, number] = [2, 3000, 1017531287];
+        const { version } = await Promise.race([
+            fetchLatestBaileysVersion(),
+            new Promise<{ version: [number, number, number] }>(resolve =>
+                setTimeout(() => resolve({ version: FALLBACK_VERSION }), 5000)
+            )
+        ]);
 
         this.sock = makeWASocket({
             auth: authState,
