@@ -1,4 +1,11 @@
 import Fastify, { FastifyInstance } from 'fastify';
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection] Erro não tratado (processo mantido):', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException] Exceção não capturada (processo mantido):', err);
+});
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
