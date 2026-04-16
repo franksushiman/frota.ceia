@@ -20,11 +20,13 @@ await build({
     target:      'node18',
     format:      'cjs',
     outfile,
-    // sqlite3 tem binário nativo (.node) — não pode ser embutido.
+    // sqlite3  — binário nativo (.node), não pode ser embutido.
+    // telegraf — usa AbortSignal internamente; quando bundled o instanceof
+    //            falha por realm-mismatch. É CJS puro, então fica externo.
     // Todos os outros pacotes (incluindo baileys ESM-only) são embutidos
     // inline aqui em tempo de build, eliminando a dependência da versão
     // do Node instalada no sistema do lojista.
-    external:    ['sqlite3'],
+    external:    ['sqlite3', 'telegraf'],
     // Polyfill para Node v18: globalThis.crypto não é exposto globalmente
     // por padrão antes do Node v19. Esta linha garante compatibilidade.
     banner:      { js: `if (!globalThis.crypto) { try { const { webcrypto } = require('node:crypto'); globalThis.crypto = webcrypto; } catch(_) {} }` },
