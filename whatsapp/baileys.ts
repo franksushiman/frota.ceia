@@ -79,7 +79,7 @@ export class BaileysProvider implements WhatsAppProvider {
             this.sock = null;
         }
 
-        const { state: authState, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+        const { state: authState, saveCreds } = await useMultiFileAuthState(process.env.AUTH_PATH || 'auth_info_baileys');
         const { version } = await fetchLatestBaileysVersion();
 
         this.sock = makeWASocket({
@@ -126,7 +126,7 @@ export class BaileysProvider implements WhatsAppProvider {
                     this.status = 'DISCONNECTED';
                     state.setStatus('DISCONNECTED');
                     state.setQr(null);
-                    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                    fs.rmSync(process.env.AUTH_PATH || 'auth_info_baileys', { recursive: true, force: true });
                     broadcastLog('WHATSAPP', 'Sessão encerrada. Será necessário ler o QR Code novamente.');
                 }
             } else if (connection === 'open') {
