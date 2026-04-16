@@ -2085,7 +2085,7 @@
             const a = ev.target.closest('a[target="_blank"]');
             if (a && navigator.userAgent.toLowerCase().includes('electron')) {
                 ev.preventDefault();
-                window.require("electron").shell.openExternal(a.href);
+                window.electronAPI?.openExternal(a.href);
             }
         });
 
