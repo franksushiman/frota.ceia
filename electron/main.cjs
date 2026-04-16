@@ -147,7 +147,7 @@ app.whenReady().then(() => {
 
     ensureUserData();
     startServer();
-    waitForServer(45000).then(() => {
+    waitForServer(120000).then(() => {
         createWindow();
         if (app.isPackaged) {
             try { autoUpdater.checkForUpdatesAndNotify(); } catch (_) {}
