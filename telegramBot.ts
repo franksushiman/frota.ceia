@@ -625,27 +625,18 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                     const nomeMotoboySender = motoboyChat?.nome?.split(' ')[0] || 'Parceiro';
                     if (num) {
                         try {
-                            const sentMessage = await ctx.reply("Processando e reescrevendo para o cliente...");
-                            const textoProfissional = await traduzirMotoboyParaCliente(text);
-                        
-                            if (textoProfissional.trim().toUpperCase().includes('IGNORAR')) {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "Sinal recebido (IA optou por n\u00e3o incomodar o cliente).");
-                                return;
-                            }
-                        
-                            const jidCliente = await enviarMensagemWhatsApp('55' + num, textoProfissional, ctx.chat.id.toString(), text, nomeMotoboySender);
-                            
+                            const jidCliente = await enviarMensagemWhatsApp('55' + num, text, ctx.chat.id.toString(), text, nomeMotoboySender);
                             if (jidCliente) {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "\u2705 Mensagem enviada ao cliente!");
+                                await ctx.reply('✅ Mensagem enviada ao cliente!');
                             } else {
-                                await ctx.telegram.editMessageText(ctx.chat.id, sentMessage.message_id, undefined, "\u274c Falha ao enviar. Verifique a conex\u00e3o do WhatsApp.");
+                                await ctx.reply('❌ Falha ao enviar. Verifique a conexão do WhatsApp.');
                             }
                         } catch (e) {
-                            console.error("[DEBUG WHATSAPP] Erro CR\u00cdTICO na API ou IA:", e);
-                            await ctx.reply("\u274c Falha ao enviar a mensagem. Verifique a conex\u00e3o.");
+                            console.error('[WHATSAPP] Erro ao enviar para cliente:', e);
+                            await ctx.reply('❌ Falha ao enviar a mensagem. Verifique a conexão.');
                         }
                     } else {
-                        await ctx.reply("\u274c Erro: Cliente sem n\u00famero de telefone para esta rota.");
+                        await ctx.reply('❌ Erro: Cliente sem número de telefone para esta rota.');
                     }
                     return;
                 }
