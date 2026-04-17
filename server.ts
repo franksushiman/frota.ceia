@@ -19,7 +19,7 @@ setInterval(() => {
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
 import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsapp/index';
-import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento } from './telegramBot';
+import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
 
@@ -459,6 +459,13 @@ async function aceitar(){
             await enviarMensagemTelegram(telegram_id, '✅ Emergência encerrada pela base. Pode continuar operando normalmente.');
         }
         await broadcastLog('SOS_ENCERRADO', '', { telegram_id: telegram_id || '' });
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+    });
+
+    app.post('/api/operacao/chat-motoboy', async (request: any, reply) => {
+        const { telegram_id, nome } = request.body || {};
+        if (!telegram_id) return reply.code(400).send({ error: 'telegram_id é obrigatório.' });
+        await iniciarChatOperador(telegram_id, nome || 'Motoboy');
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 

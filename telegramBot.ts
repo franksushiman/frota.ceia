@@ -19,6 +19,17 @@ const userSessions: Record<number, UserSession> = {};
 export let bot: Telegraf | null = null;
 let botLaunchPromise: Promise<void> | null = null;
 
+export async function iniciarChatOperador(telegram_id: string, nome: string): Promise<void> {
+    const chatId = Number(telegram_id);
+    userSessions[chatId] = { step: 'SOS_CHAT', data: {} };
+    broadcastLog('SOS', `Operador iniciou conversa com ${nome}.`, { telegram_id });
+    try {
+        await bot?.telegram.sendMessage(chatId, '📞 O operador da loja quer falar com você. Responda aqui normalmente.');
+    } catch (e) {
+        console.error('[TELEGRAM] Erro ao iniciar chat com motoboy:', e);
+    }
+}
+
 export async function enviarMensagemTelegram(telegram_id: string, texto: string) {
     if (bot === null) { console.error("[DEBUG TELEGRAM] ERRO FATAL: O bot esta null na hora de enviar"); return false; }
     try {

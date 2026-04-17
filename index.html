@@ -728,17 +728,23 @@
             document.getElementById('modal-chat-sac').style.display = 'flex';
         }
 
-        function chatMotoboy(telegramId, nome) {
-            telegramIdSOSAtual = telegramId;
-            document.getElementById('chat-history-sos').innerHTML = '';
-            document.querySelector('#modal-chat-sos h3').textContent = `💬 Falar com ${nome}`;
-            document.getElementById('modal-chat-sos').style.display = 'flex';
+        async function iniciarChatMotoboy(telegramId, nome) {
+            try {
+                await fetch('/api/operacao/chat-motoboy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: telegramId, nome })
+                });
+                // O broadcast SOS abrirá o modal automaticamente
+            } catch (e) {
+                showToast('Erro ao iniciar conversa com o motoboy.', 'error');
+            }
         }
 
-        function chatCliente(jid, nome) {
-            jidSACAtual = jid;
+        function iniciarChatCliente(numero, nome) {
+            jidSACAtual = numero.startsWith('55') ? numero : '55' + numero;
             document.getElementById('chat-history-sac').innerHTML = '';
-            document.querySelector('#modal-chat-sac h3').textContent = `📞 Falar com ${nome}`;
+            document.querySelector('#modal-chat-sac h3').textContent = `📞 ${nome}`;
             document.getElementById('modal-chat-sac').style.display = 'flex';
         }
 
@@ -1174,11 +1180,8 @@
                     const primeiroPedidoComTel = pac.pedidosIds.map(pid => pedidos.find(x => x.id === pid)).find(p => p && (p.telefone || p.telefoneCliente || p.whatsapp || p.telefone_cliente));
                     const telCliente = primeiroPedidoComTel ? (primeiroPedidoComTel.telefone || primeiroPedidoComTel.telefoneCliente || primeiroPedidoComTel.whatsapp || primeiroPedidoComTel.telefone_cliente) : null;
                     const numCliente = telCliente ? telCliente.replace(/\D/g, '') : null;
-                    const jidCliente = numCliente ? `55${numCliente}@s.whatsapp.net` : null;
-                    const nomeCliente = primeiroPedidoComTel?.nomeCliente || 'Cliente';
-                    const motoboyTelegramId = pac.motoboy?.telegram_id || '';
-                    let btnChatMotoboy = (!isPendente && motoboyTelegramId) ? `<button class="btn-create" style="background:#f59e0b; padding:4px 8px;" onclick="chatMotoboy('${motoboyTelegramId}', '${motoboyNome.split(' ')[0]}')">💬 Motoboy</button>` : '';
-                    let btnChatCliente = (!isPendente && jidCliente) ? `<button class="btn-create" style="background:#06b6d4; padding:4px 8px;" onclick="chatCliente('${jidCliente}', '${nomeCliente.split(' ')[0]}')">📞 Cliente</button>` : '';
+                    const nomeClientePrimeiro = (primeiroPedidoComTel?.nomeCliente || 'Cliente').split(' ')[0].replace(/'/g, "\\'");
+                    let btnChatCliente = (!isPendente && numCliente) ? `<button class="btn-create" style="background:#06b6d4; padding:4px 8px;" onclick="iniciarChatCliente('${numCliente}', '${nomeClientePrimeiro}')">📞 Cliente</button>` : '';
 
                     container.style.borderColor = borderColor;
                     container.style.background = bgColor;
@@ -1187,7 +1190,6 @@
                         <div class="package-header" style="color:${headerColor}; margin-bottom: 10px;">
                             <span>${headerText}</span>
                             <div style="display:flex; gap:5px; flex-wrap:wrap;">
-                                ${btnChatMotoboy}
                                 ${btnChatCliente}
                                 ${btnColetarHTML}
                                 ${btnCancelarHTML}
@@ -1814,7 +1816,8 @@
                            <button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')" ${moto.status === 'EM_ROTA' ? 'disabled title="Em rota — cancelamento bloqueado"' : ''}>❌ Cancelar</button>`
                         : `<button class="btn-action btn-edit" onclick="abrirModalEditar('${moto.telegram_id}', '${escNome}', '${escWhatsapp}', '${moto.vinculo}', '${moto.veiculo || ''}', '${escPix}')">✏️ Editar</button>
                            <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
-                           <button class="btn-action btn-history" onclick="abrirModalHistorico('${moto.telegram_id}', '${escNome}')">📜 Histórico</button>`;
+                           <button class="btn-action btn-history" onclick="abrirModalHistorico('${moto.telegram_id}', '${escNome}')">📜 Histórico</button>
+                           <button class="btn-action" style="background:#fef9c3;color:#854d0e;border-color:#fde047;" onclick="iniciarChatMotoboy('${moto.telegram_id}', '${escNome.split(' ')[0]}')">💬 Falar</button>`;
 
                     card.innerHTML = `
                         ${nuvemBadge}
