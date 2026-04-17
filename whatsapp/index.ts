@@ -22,6 +22,15 @@ export async function iniciarWhatsApp(): Promise<void> {
     }
 }
 
+export async function trocarNumeroWhatsApp(): Promise<void> {
+    await provider.disconnect();
+    const authPath = process.env.AUTH_PATH || 'auth_info_baileys';
+    try {
+        const fs = await import('fs');
+        fs.rmSync(authPath, { recursive: true, force: true });
+    } catch (_) {}
+}
+
 export async function enviarMensagemWhatsApp(
     numero: string,
     texto: string,

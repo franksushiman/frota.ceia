@@ -325,6 +325,7 @@
                     <strong style="font-size: 0.9rem; color: #15803d;">Conexão via QR Code (Baileys)</strong>
                     <p style="font-size: 0.82rem; color: #6b7280; margin: 8px 0 15px;">Tecnologia comunitária. Recomendamos usar um número secundário dedicado ao robô.</p>
                     <button type="button" id="btn-conectar-whatsapp" onclick="abrirAlertaBanimento()" style="background: #25D366; color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; transition: 0.2s;">Conectar WhatsApp</button>
+                    <button type="button" id="btn-desconectar-whatsapp" onclick="trocarNumeroWhatsApp()" style="display:none; background: #ef4444; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; width: 100%; margin-top: 10px; transition: 0.2s;">Trocar Número do WhatsApp</button>
                 </div>
 
                 <button id="btn-salvar-perfil" class="btn" style="margin-top: 16px;" onclick="salvarPerfil()">Gravar Base</button>
@@ -1461,6 +1462,27 @@
             document.getElementById('modal-alerta-ban').style.display = 'none';
         };
 
+        function atualizarBotaoWhatsApp(status) {
+            const conectado = status === 'CONNECTED';
+            const btnConectar = document.getElementById('btn-conectar-whatsapp');
+            const btnTrocar = document.getElementById('btn-desconectar-whatsapp');
+            if (btnConectar) btnConectar.style.display = conectado ? 'none' : 'block';
+            if (btnTrocar) btnTrocar.style.display = conectado ? 'block' : 'none';
+        }
+
+        window.trocarNumeroWhatsApp = async function() {
+            if (!confirm('Isso vai desconectar o número atual e apagar a sessão. Você precisará ler um novo QR Code.\n\nContinuar?')) return;
+            try {
+                await fetch('/api/whatsapp/trocar-numero', { method: 'POST' });
+                atualizarBotaoWhatsApp('DISCONNECTED');
+                showToast('Sessão apagada. Conecte o novo número.', 'error');
+                // Abre o modal de QR automaticamente para parear o novo número
+                setTimeout(() => abrirAlertaBanimento(), 800);
+            } catch (e) {
+                showToast('Erro ao trocar número.', 'error');
+            }
+        };
+
         window.confirmarApiNaoOficial = function() {
             fecharAlertaBanimento();
             document.getElementById('modal-qr-whatsapp').style.display = 'flex';
@@ -1474,6 +1496,7 @@
                         if (data.qr) document.getElementById('qr-code-img').src = data.qr;
                         if (data.status === 'CONNECTED') {
                             clearInterval(window.qrInterval);
+                            atualizarBotaoWhatsApp('CONNECTED');
                             showToast('WhatsApp Conectado com Sucesso!');
                             setTimeout(() => fecharModalQR(), 1500);
                         }
@@ -1493,6 +1516,7 @@
             document.getElementById(id).classList.add('active');
             el.classList.add('active');
             if(id === 'tab-frota') carregarFrota();
+            if(id === 'tab-perfil') fetch('/api/whatsapp/status').then(r => r.json()).then(d => atualizarBotaoWhatsApp(d.status)).catch(() => {});
             if(id === 'tab-mapa' && map) {
                 google.maps.event.trigger(map, 'resize');
                 const enderecoBase = document.getElementById('prof-endereco').value;
@@ -1549,6 +1573,10 @@
                         document.getElementById('sos-banner').style.display = 'none';
                         document.getElementById('chat-history-sos').innerHTML = '';
                         fecharModal('modal-chat-sos');
+                    }
+                    else if (log.tipo === 'WHATSAPP') {
+                        if (log.mensagem && log.mensagem.includes('operante')) atualizarBotaoWhatsApp('CONNECTED');
+                        else if (log.mensagem && (log.mensagem.includes('encerrada') || log.mensagem.includes('DISCONNECTED') || log.mensagem.includes('Sessão encerrada'))) atualizarBotaoWhatsApp('DISCONNECTED');
                     }
                     else if (log.tipo === 'SAC_REQUEST') {
                         jidSACAtual = log.jid;

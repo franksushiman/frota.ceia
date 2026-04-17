@@ -18,7 +18,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
-import { iniciarWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsapp/index';
+import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
@@ -562,6 +562,12 @@ async function aceitar(){
 
     app.get('/api/whatsapp/status', async (request, reply) => {
         return reply.code(200).type('application/json; charset=utf-8').send({ status: sessionStatus, qr: qrCodeBase64 });
+    });
+
+    app.post('/api/whatsapp/trocar-numero', async (_request, reply) => {
+        await trocarNumeroWhatsApp();
+        await broadcastLog('WHATSAPP', 'Sessão encerrada e arquivos limpos. Leia o QR Code para parear um novo número.');
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.post('/api/whatsapp/send', async (request: any, reply) => {
