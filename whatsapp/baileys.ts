@@ -47,8 +47,14 @@ export class BaileysProvider implements WhatsAppProvider {
 
     public setClienteSAC(jid: string, ativo: boolean): void {
         const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
-        if (ativo) this.sacAtivos.add(normalizado);
-        else this.sacAtivos.delete(normalizado);
+        if (ativo) {
+            this.sacAtivos.add(normalizado);
+        } else {
+            this.sacAtivos.delete(normalizado);
+            // Reseta sessão do cliente para BOT ao encerrar SAC
+            const session = this.customerSessionCache.get(normalizado);
+            if (session) { clearTimeout(session.timeout); this.customerSessionCache.delete(normalizado); }
+        }
     }
 
     isConnected(): boolean {
@@ -268,6 +274,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
                 if (respostaIA.includes('[ACTION_HUMAN]')) {
                     session.mode = 'HUMAN';
+                    this.sacAtivos.add(jidNormalized);
                     broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
                     await this.sendMessage(numeroCliente, 'Um de nossos atendentes já vai falar com você. Aguarde um instante.', 'SISTEMA', 'transfere_humano', 'BOT');
                     return;

@@ -725,6 +725,9 @@
 
         function abrirModalSAC() {
             document.getElementById('sac-banner').style.display = 'none';
+            if (jidSACAtual) {
+                fetch('/api/sac/iniciar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jid: jidSACAtual }) }).catch(() => {});
+            }
             document.getElementById('modal-chat-sac').style.display = 'flex';
         }
 
