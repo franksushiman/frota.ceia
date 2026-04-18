@@ -27,6 +27,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Python (node-gyp — Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Configurar node-gyp + Visual Studio (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          npm config set msvs_version 2022
+          npm config set python python
+
       - name: Instalar dependências
         run: npm install
 
