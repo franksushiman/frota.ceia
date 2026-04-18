@@ -33,14 +33,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Cache Electron
+      - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/electron
+            ~/.cache/electron-builder
             ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
             ~/Library/Caches/electron
-          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+            ~/Library/Caches/electron-builder
+          key: electron-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-cache-${{ runner.os }}-
 
       - name: Instalar dependências
         run: npm install || npm install || npm install
@@ -61,6 +66,7 @@ jobs:
         run: npm run electron:build -- --linux --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USE_SYSTEM_FPM: true
 
       - name: Publicar — Windows
         if: matrix.os == 'windows-latest'
