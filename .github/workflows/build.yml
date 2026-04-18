@@ -33,15 +33,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Configurar node-gyp + Visual Studio (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          npm config set msvs_version 2022
-          npm config set python python
-
       - name: Instalar dependências
         run: npm install
+        env:
+          GYP_MSVS_VERSION: 2022
 
       - name: Sincronizar versão com a tag
         shell: bash
