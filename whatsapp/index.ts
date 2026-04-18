@@ -31,6 +31,10 @@ export async function trocarNumeroWhatsApp(): Promise<void> {
     } catch (_) {}
 }
 
+export function setClienteSAC(jid: string, ativo: boolean): void {
+    provider.setClienteSAC(jid, ativo);
+}
+
 export async function enviarMensagemWhatsApp(
     numero: string,
     texto: string,

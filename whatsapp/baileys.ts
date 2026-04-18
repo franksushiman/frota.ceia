@@ -43,6 +43,13 @@ export class BaileysProvider implements WhatsAppProvider {
     private contextCache = new Map<string, ChatContext>();
     private lidToPhone = new Map<string, string>();
     private customerSessionCache = new Map<string, CustomerSession>();
+    private sacAtivos = new Set<string>();
+
+    public setClienteSAC(jid: string, ativo: boolean): void {
+        const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
+        if (ativo) this.sacAtivos.add(normalizado);
+        else this.sacAtivos.delete(normalizado);
+    }
 
     isConnected(): boolean {
         return this.status === 'CONNECTED';
@@ -208,6 +215,13 @@ export class BaileysProvider implements WhatsAppProvider {
                 }
             }
 
+            // ROTEAMENTO 0: OPERADOR EM ATENDIMENTO SAC (prioridade máxima)
+            const jidNorm0 = jidNormalizedUser(msg.key.remoteJid!);
+            if (this.sacAtivos.has(jidNorm0)) {
+                broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNorm0, nome: msg.pushName || numeroNormalizado });
+                return;
+            }
+
             // ROTEAMENTO 1: CLIENTE TEM UMA ROTA ATIVA (Bypass da IA)
             const rota = await getRotaPeloCliente(numeroNormalizado);
             if (rota && rota.telegram_id) {
@@ -229,7 +243,7 @@ export class BaileysProvider implements WhatsAppProvider {
             }
 
             // ROTEAMENTO 2: CHAT BLINDADO (Cache da Linha Direta)
-            const jidNormalized = jidNormalizedUser(msg.key.remoteJid!);
+            const jidNormalized = jidNorm0;
 
             if (this.contextCache.has(jidNormalized)) {
                 const contextoEncontrado = this.contextCache.get(jidNormalized)!;

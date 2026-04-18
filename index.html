@@ -745,8 +745,20 @@
             }
         }
 
-        function iniciarChatCliente(numero, nome) {
-            jidSACAtual = numero.startsWith('55') ? numero : '55' + numero;
+        async function iniciarChatCliente(numero, nome) {
+            const jid = (numero.startsWith('55') ? numero : '55' + numero);
+            try {
+                await fetch('/api/sac/iniciar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid })
+                });
+            } catch (e) {}
+            jidSACAtual = jid;
+            // Fechar chat do motoboy silenciosamente se estiver aberto
+            telegramIdSOSAtual = null;
+            document.querySelector('#modal-chat-sos h3').textContent = '🚨 Central de Apoio (SOS)';
+            fecharModal('modal-chat-sos');
             document.getElementById('chat-history-sac').innerHTML = '';
             document.querySelector('#modal-chat-sac h3').textContent = `📞 ${nome}`;
             document.getElementById('modal-chat-sac').style.display = 'flex';

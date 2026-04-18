@@ -635,7 +635,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                     const nomeMotoboySender = motoboyChat?.nome?.split(' ')[0] || 'Parceiro';
                     if (num) {
                         try {
-                            const jidCliente = await enviarMensagemWhatsApp('55' + num, text, ctx.chat.id.toString(), text, nomeMotoboySender);
+                            const jidCliente = await enviarMensagemWhatsApp('55' + num, `${nomeMotoboySender}: ${text}`, ctx.chat.id.toString(), text, nomeMotoboySender);
                             if (jidCliente) {
                                 await ctx.reply('✅ Mensagem enviada ao cliente!');
                             } else {

@@ -18,7 +18,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
-import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp } from './whatsapp/index';
+import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
@@ -466,6 +466,19 @@ async function aceitar(){
         const { telegram_id, nome } = request.body || {};
         if (!telegram_id) return reply.code(400).send({ error: 'telegram_id é obrigatório.' });
         await iniciarChatOperador(telegram_id, nome || 'Motoboy');
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+    });
+
+    app.post('/api/sac/iniciar', async (request: any, reply) => {
+        const { jid } = request.body || {};
+        if (!jid) return reply.code(400).send({ error: 'jid é obrigatório.' });
+        setClienteSAC(jid, true);
+        return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
+    });
+
+    app.post('/api/sac/encerrar', async (request: any, reply) => {
+        const { jid } = request.body || {};
+        if (jid) setClienteSAC(jid, false);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
