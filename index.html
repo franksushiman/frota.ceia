@@ -730,12 +730,16 @@
 
         async function iniciarChatMotoboy(telegramId, nome) {
             try {
-                await fetch('/api/operacao/chat-motoboy', {
+                const res = await fetch('/api/operacao/chat-motoboy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ telegram_id: telegramId, nome })
                 });
-                // O broadcast SOS abrirá o modal automaticamente
+                if (!res.ok) throw new Error();
+                telegramIdSOSAtual = telegramId;
+                document.getElementById('chat-history-sos').innerHTML = '';
+                document.querySelector('#modal-chat-sos h3').textContent = `💬 ${nome}`;
+                document.getElementById('modal-chat-sos').style.display = 'flex';
             } catch (e) {
                 showToast('Erro ao iniciar conversa com o motoboy.', 'error');
             }

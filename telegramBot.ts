@@ -22,7 +22,6 @@ let botLaunchPromise: Promise<void> | null = null;
 export async function iniciarChatOperador(telegram_id: string, nome: string): Promise<void> {
     const chatId = Number(telegram_id);
     userSessions[chatId] = { step: 'SOS_CHAT', data: {} };
-    broadcastLog('SOS', `Operador iniciou conversa com ${nome}.`, { telegram_id });
     try {
         await bot?.telegram.sendMessage(chatId, '📞 O operador da loja quer falar com você. Responda aqui normalmente.');
     } catch (e) {
