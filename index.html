@@ -408,7 +408,7 @@
             <h3 style="margin-top:0; color:var(--text-dark);">Despachar Pacote</h3>
             <p style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 20px;">Selecione um motoboy disponível para assumir esta entrega.</p>
 
-            <button class="btn-create" style="width: 100%; padding: 10px; font-size: 0.9rem; background: #8b5cf6; margin-bottom: 15px;" onclick="buscarNaNuvem()">☁️ Buscar Parceiro na Nuvem</button>
+            <button id="btn-buscar-nuvem" class="btn-create" style="width: 100%; padding: 10px; font-size: 0.9rem; background: #8b5cf6; margin-bottom: 15px;">☁️ Buscar Parceiro na Nuvem</button>
             <div id="lista-nuvem-disponiveis" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
             <hr style="border: 0; border-top: 1px solid var(--border); margin-bottom: 15px;">
 
@@ -817,7 +817,6 @@
 
         let pedidos = [];
         let pacotes = [];
-        let pacoteSelecionadoParaDespacho = null;
 
         let map;
         let drawingManager;
@@ -1294,11 +1293,11 @@
         };
 
         async function abrirModalDespacho(pacId) {
-            pacoteSelecionadoParaDespacho = pacId;
-            _pacoteParaNuvem = pacId;
             document.getElementById('lista-nuvem-disponiveis').innerHTML = '';
             const pac = pacotes.find(p => p.id === pacId);
             if (pac.pedidosIds.length === 0) return showToast("Não dá pra despachar um pacote vazio!", "error");
+
+            document.getElementById('btn-buscar-nuvem').onclick = () => buscarNaNuvem(pacId);
 
             const container = document.getElementById('lista-motoboys-disponiveis');
             container.innerHTML = '<p style="font-size:0.8rem">Buscando radar da frota...</p>';
@@ -1321,7 +1320,7 @@
                     btn.style.textAlign = 'left';
                     btn.style.width = '100%';
                     btn.innerHTML = `🛵 <b>${m.nome}</b> <span style="float:right; font-size:0.7rem">${m.veiculo || ''}</span>`;
-                    btn.onclick = () => confirmarDespacho(m);
+                    btn.addEventListener('click', () => confirmarDespacho(m, pacId));
                     container.appendChild(btn);
                 });
             } catch (e) {
@@ -1329,9 +1328,9 @@
             }
         }
 
-        async function confirmarDespacho(motoboy) {
+        async function confirmarDespacho(motoboy, pacId) {
             document.getElementById("lista-motoboys-disponiveis").innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-dark);"><b>⏳ Processando Despacho...</b><br><br><small>A Inteligência Artificial está a resumir a rota. Por favor, aguarde uns segundos.</small></div>';
-            const pac = pacotes.find(p => p.id === pacoteSelecionadoParaDespacho);
+            const pac = pacotes.find(p => p.id === pacId);
             pac.status = 'PENDENTE_ACEITE';
             pac.motoboy = motoboy;
 
@@ -1814,19 +1813,18 @@
 
                     const card = document.createElement('div');
                     card.className = 'fleet-card';
-                    card.dataset.moto = JSON.stringify({ ...moto, _nuvem: _nuvemCards[moto.telegram_id] || {} });
+                    card.dataset.moto = JSON.stringify(moto);
 
                     if (ehNuvem) {
                         card.style.background = '#f0f7ff';
                         card.style.borderLeft = '4px solid #3b82f6';
                     }
 
-                    const nuvemDados = _nuvemCards[moto.telegram_id] || {};
                     const nuvemBadge = ehNuvem
                         ? `<div style="margin-bottom:10px;"><span style="background:#3b82f6;color:white;font-size:11px;border-radius:4px;padding:2px 8px;font-weight:600;">🌐 PARCEIRO NUVEM</span></div>`
                         : '';
                     const nuvemOrigem = ehNuvem
-                        ? `<div><small style="color:#6b7280">📍 Origem: ${nuvemDados.no_nome || 'Parceiro'}</small></div>`
+                        ? `<div><small style="color:#6b7280">📍 Origem: ${moto.no_nome || 'Parceiro'}</small></div>`
                         : '';
 
                     const botoesAcao = ehNuvem
@@ -1840,7 +1838,7 @@
 
                     card.innerHTML = `
                         ${nuvemBadge}
-                        <div class="fleet-header"><strong style="font-size: 1.1rem; color: var(--text-dark);">${moto.nome || 'Sem Nome'}</strong>${ehNuvem ? `<small style="color:#eab308; font-weight:bold; margin-left: 8px;">⭐ ${nuvemDados.estrelas ? parseFloat(nuvemDados.estrelas).toFixed(1) : '5.0'}</small>` : ''}<span class="status-badge ${badgeClass}">${moto.status}</span></div>
+                        <div class="fleet-header"><strong style="font-size: 1.1rem; color: var(--text-dark);">${moto.nome || 'Sem Nome'}</strong>${ehNuvem ? `<small style="color:#eab308; font-weight:bold; margin-left: 8px;">⭐ ${moto.estrelas ? parseFloat(moto.estrelas).toFixed(1) : '5.0'}</small>` : ''}<span class="status-badge ${badgeClass}">${moto.status}</span></div>
                         <div style="font-size: 0.85rem; color: var(--text-light); line-height: 1.6; margin-bottom: 15px;">
                             ${nuvemOrigem}
                             <div>🏍️ <b>Veículo:</b> ${moto.veiculo || '-'}</div><div>💼 <b>Vínculo:</b> ${moto.vinculo || '-'}</div><div>🔑 <b>PIX:</b> <span style="font-family: var(--font-mono);">${moto.pix || '-'}</span></div>
@@ -2211,19 +2209,13 @@
 
         // ===================== NUVEM =====================
 
-        // Armazena dados extras dos motoboys parceiros (taxa, no_nome etc.)
-        const _nuvemCards = {};
-
         // Cache da frota atual (usado por abrirDadosNuvem)
         let _frotaAtual = [];
-
-        // Pacote que está sendo despachado via nuvem (referência do modal-despacho)
-        let _pacoteParaNuvem = null;
 
         function abrirDadosNuvem(telegramId) {
             const moto = _frotaAtual.find(m => m.telegram_id === telegramId);
             if (!moto) return;
-            abrirModalNuvemDados({ ...moto, _nuvem: _nuvemCards[moto.telegram_id] || {} });
+            abrirModalNuvemDados(moto);
         }
 
         async function cancelarNuvem(id, status) {
@@ -2233,12 +2225,11 @@
             }
             if (!confirm('Remover este parceiro Nuvem da frota?')) return;
             await fetch('/api/fleet/' + id, { method: 'DELETE' });
-            delete _nuvemCards[id];
             carregarFrota();
             showToast('Parceiro removido da frota.', 'success');
         }
 
-        async function buscarNaNuvem() {
+        async function buscarNaNuvem(pacId) {
             const listaEl = document.getElementById('lista-nuvem-disponiveis');
             listaEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-light);">Consultando parceiros...</p>';
             try {
@@ -2249,38 +2240,36 @@
                     listaEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-light);">Nenhum parceiro disponível no momento.</p>';
                     return;
                 }
-                listaEl.innerHTML = lista.map((m, i) => `
-                    <div style="display:flex; justify-content:space-between; align-items:center; background:#faf5ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px 12px;">
-                        <div>
-                            <div style="font-weight:600; font-size:0.88rem;">${m.nome}</div>
-                            <div style="font-size:0.75rem; color:var(--text-light);">${m.veiculo || '-'} &bull; ${m.no_nome} &bull; ${m.distancia_km.toFixed(1)} km</div>
-                        </div>
-                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                            <span style="font-family:var(--font-mono); font-weight:700; color:#7c3aed; font-size:0.82rem;">R$ ${m.taxa_deslocamento_brl.toFixed(2)}</span>
-                            <button class="btn-create" style="font-size:0.75rem; padding:5px 10px; background:#7c3aed;" onclick="convidarNuvem(${i})">Convidar</button>
-                        </div>
-                    </div>
-                `).join('');
-                // Salva lista para uso no convidarNuvem
-                window._listaResultadosNuvem = lista;
+                listaEl.innerHTML = '';
+                lista.forEach(m => {
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#faf5ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px 12px;">
+                            <div>
+                                <div style="font-weight:600; font-size:0.88rem;">${m.nome}</div>
+                                <div style="font-size:0.75rem; color:var(--text-light);">${m.veiculo || '-'} &bull; ${m.no_nome} &bull; ${m.distancia_km.toFixed(1)} km</div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                                <span style="font-family:var(--font-mono); font-weight:700; color:#7c3aed; font-size:0.82rem;">R$ ${m.taxa_deslocamento_brl.toFixed(2)}</span>
+                                <button class="btn-create btn-convidar-nuvem-item" style="font-size:0.75rem; padding:5px 10px; background:#7c3aed;">Convidar</button>
+                            </div>
+                        </div>`;
+                    wrapper.querySelector('.btn-convidar-nuvem-item').addEventListener('click', () => convidarNuvem(m, pacId));
+                    listaEl.appendChild(wrapper);
+                });
             } catch(e) {
                 listaEl.innerHTML = '<p style="font-size:0.8rem; color:#b91c1c;">Falha ao buscar parceiros.</p>';
             }
         }
 
-        async function convidarNuvem(idx) {
-            const m = (window._listaResultadosNuvem || [])[idx];
-            if (!m) return;
-
-            // Obtém o pacote atual do modal-despacho
-            const pacoteId = _pacoteParaNuvem || pacoteSelecionadoParaDespacho;
+        async function convidarNuvem(m, pacoteId) {
             if (!pacoteId) return showToast('Abra o despacho de um pacote antes de convidar.', 'error');
 
             let pedidosDoPacote = [];
             try {
                 const resPacotes = await fetch('/api/pacotes');
-                const pacotes = await resPacotes.json();
-                const pacote = pacotes.find(p => p.id === pacoteId);
+                const listaPacotes = await resPacotes.json();
+                const pacote = listaPacotes.find(p => p.id === pacoteId);
                 if (pacote) {
                     const resPedidos = await fetch('/api/pedidos');
                     const todos = await resPedidos.json();
@@ -2292,13 +2281,9 @@
                 const res = await fetch('/api/frota-compartilhada/convidar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km })
+                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, no_nome: m.no_nome, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km })
                 });
                 if (!res.ok) { const d = await res.json(); return showToast(d.error || 'Erro ao convidar.', 'error'); }
-
-                // Salva dados extras para exibir no card da frota
-                _nuvemCards[m.telegram_id] = { no_nome: m.no_nome, no_url: m.no_url, taxa: m.taxa_deslocamento_brl, distancia_km: m.distancia_km };
-
                 fecharModal('modal-despacho');
                 showToast(`Convite enviado para ${m.nome}!`, 'success');
                 carregarFrota();
@@ -2308,28 +2293,25 @@
         }
 
         function abrirModalMotoboyNuvem(moto) {
-            const dados = _nuvemCards[moto.telegram_id] || {};
             document.getElementById('nuvem-modal-nome').textContent = moto.nome || '-';
             document.getElementById('nuvem-modal-veiculo').textContent = moto.veiculo || '-';
-            document.getElementById('nuvem-modal-distancia').textContent = dados.distancia_km ? dados.distancia_km.toFixed(1) + ' km' : '-';
-            document.getElementById('nuvem-modal-taxa').textContent = dados.taxa ? 'R$ ' + Number(dados.taxa).toFixed(2) : '-';
-            document.getElementById('nuvem-modal-no').textContent = dados.no_nome || '-';
+            document.getElementById('nuvem-modal-distancia').textContent = moto.distancia_km ? Number(moto.distancia_km).toFixed(1) + ' km' : '-';
+            document.getElementById('nuvem-modal-taxa').textContent = moto.taxa_deslocamento ? 'R$ ' + Number(moto.taxa_deslocamento).toFixed(2) : '-';
+            document.getElementById('nuvem-modal-no').textContent = moto.no_nome || '-';
             document.getElementById('modal-motoboy-nuvem').dataset.telegramId = moto.telegram_id;
             document.getElementById('modal-motoboy-nuvem').style.display = 'flex';
         }
 
         function abrirModalNuvemDados(moto) {
-            const dados = moto._nuvem || _nuvemCards[moto.telegram_id] || {};
-
             document.getElementById('nuvem-edit-id').value = moto.telegram_id;
-            document.getElementById('nuvem-no-origem').textContent = dados.no_nome || '-';
+            document.getElementById('nuvem-no-origem').textContent = moto.no_nome || '-';
             document.getElementById('nuvem-edit-nome').value = moto.nome || '';
             document.getElementById('nuvem-edit-whatsapp').value = moto.whatsapp || moto.telefone || '-';
             document.getElementById('nuvem-edit-pix').value = moto.pix || '';
             document.getElementById('nuvem-edit-veiculo').value = moto.veiculo || '';
 
             const taxaEntrega = Number(moto.taxa_entrega || 0);
-            const taxaDeslocamento = Number(dados.taxa || moto.taxa_deslocamento || 0);
+            const taxaDeslocamento = Number(moto.taxa_deslocamento || 0);
             const total = taxaEntrega + taxaDeslocamento;
 
             const fmt = v => 'R$ ' + v.toFixed(2).replace('.', ',');
@@ -2351,7 +2333,6 @@
             if (!id) return;
             confirmarAcao('Cancelar a entrega deste parceiro Nuvem e removê-lo da frota?', async () => {
                 await fetch(`/api/fleet/${id}`, { method: 'DELETE' });
-                delete _nuvemCards[id];
                 fecharModal('modal-motoboy-nuvem');
                 carregarFrota();
                 showToast('Parceiro removido da frota.', 'success');

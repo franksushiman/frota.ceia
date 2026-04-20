@@ -26,13 +26,21 @@ interface CustomerSession {
     timeout: NodeJS.Timeout;
 }
 
-interface ContextoPedido {
-    texto: string;
-    nomeMotoboy: string;
-    localizacao: string;
-    fraseETA: string;
-    status: 'AGUARDANDO' | 'PENDENTE_ACEITE' | 'EM_ROTA';
-    respostaDireta?: string;
+interface StatusPedidoTool {
+    status: 'AGUARDANDO' | 'PENDENTE_ACEITE' | 'EM_ROTA' | 'NAO_ENCONTRADO';
+    entregador?: string;
+    localizacao?: string;
+    eta?: string;
+}
+
+interface ResultadoIA {
+    resposta: string;
+    transferir: boolean;
+}
+
+interface ConversationEntry {
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    timeout: NodeJS.Timeout;
 }
 
 export class BaileysProvider implements WhatsAppProvider {
@@ -44,6 +52,7 @@ export class BaileysProvider implements WhatsAppProvider {
     private lidToPhone = new Map<string, string>();
     private customerSessionCache = new Map<string, CustomerSession>();
     private sacAtivos = new Set<string>();
+    private conversationHistories = new Map<string, ConversationEntry>();
 
     public setClienteSAC(jid: string, ativo: boolean): void {
         const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
@@ -51,9 +60,10 @@ export class BaileysProvider implements WhatsAppProvider {
             this.sacAtivos.add(normalizado);
         } else {
             this.sacAtivos.delete(normalizado);
-            // Reseta sessão do cliente para BOT ao encerrar SAC
             const session = this.customerSessionCache.get(normalizado);
             if (session) { clearTimeout(session.timeout); this.customerSessionCache.delete(normalizado); }
+            const history = this.conversationHistories.get(normalizado);
+            if (history) { clearTimeout(history.timeout); this.conversationHistories.delete(normalizado); }
         }
     }
 
@@ -270,9 +280,9 @@ export class BaileysProvider implements WhatsAppProvider {
             const nomeCliente = msg.pushName?.split(' ')[0]?.trim() || null;
 
             try {
-                const respostaIA = await this.processarMensagemIA(mensagemTexto, config, nomeCliente);
+                const resultado = await this.processarMensagemIA(jidNormalized, jidParaBusca, mensagemTexto, config, nomeCliente);
 
-                if (respostaIA.includes('[ACTION_HUMAN]')) {
+                if (resultado.transferir) {
                     session.mode = 'HUMAN';
                     this.sacAtivos.add(jidNormalized);
                     broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
@@ -280,24 +290,7 @@ export class BaileysProvider implements WhatsAppProvider {
                     return;
                 }
 
-                const contextoPedido = await this.buscarContextoPedidoCliente(jidParaBusca, config, mensagemTexto);
-                if (contextoPedido) broadcastLog('WHATSAPP', `[RASTREIO] Pedido identificado para ${numeroExibicao}: ${contextoPedido.texto}`);
-
-                if (contextoPedido?.respostaDireta) {
-                    await this.sendMessage(numeroCliente, contextoPedido.respostaDireta, 'SISTEMA', 'SISTEMA_RASTREIO', 'BOT');
-                    return;
-                }
-
-                if (!contextoPedido) {
-                    const msgLower = mensagemTexto.toLowerCase();
-                    const intentRastreio = /pedido|entrega|entregador|motoboy|rastreio|onde.*pedido|demora.*entrega|chegou|chegando|status/.test(msgLower);
-                    if (intentRastreio) {
-                        await this.sendMessage(numeroCliente, 'Não encontrei pedidos ativos associados ao seu número. Se precisar de ajuda, fale com um de nossos atendentes.', 'SISTEMA', 'sem_pedido', 'BOT');
-                        return;
-                    }
-                }
-
-                await this.sendMessage(numeroCliente, respostaIA, 'SISTEMA', 'SISTEMA_AUTO_ATENDIMENTO', 'BOT');
+                await this.sendMessage(numeroCliente, resultado.resposta, 'SISTEMA', 'SISTEMA_AUTO_ATENDIMENTO', 'BOT');
             } catch (error) {
                 console.error('[ERRO FATAL] Falha na execução do Auto-Atendimento:', error);
             }
@@ -403,61 +396,144 @@ export class BaileysProvider implements WhatsAppProvider {
             : `seu pedido vai chegar até você em ${tempoEstimado}`;
     }
 
+    private addToHistory(jid: string, role: 'user' | 'assistant', content: string): void {
+        const existing = this.conversationHistories.get(jid);
+        if (existing) clearTimeout(existing.timeout);
+        const entry: ConversationEntry = existing || { messages: [], timeout: null as any };
+        entry.messages.push({ role, content });
+        if (entry.messages.length > 20) entry.messages = entry.messages.slice(-20);
+        entry.timeout = setTimeout(() => this.conversationHistories.delete(jid), 15 * 60 * 1000);
+        this.conversationHistories.set(jid, entry);
+    }
+
     private async processarMensagemIA(
+        jid: string,
+        jidParaBusca: string,
         mensagemCliente: string,
         config: any,
         nomeCliente: string | null = null
-    ): Promise<string> {
+    ): Promise<ResultadoIA> {
         if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
+
         const horariosFormatados = config.horarios ? Object.entries(config.horarios)
-            .filter(([, val]: any) => val.on)
+            .filter(([, val]: any) => val.ativo)
             .map(([dia, val]: any) => `${dia.charAt(0).toUpperCase() + dia.slice(1)}: ${val.abre} às ${val.fecha}`)
             .join(', ') : 'Não informado.';
 
         const instrucaoNome = nomeCliente
-            ? `Você está conversando com o cliente chamado ${nomeCliente}. Trate-o pelo primeiro nome de forma natural.`
+            ? `Você está conversando com ${nomeCliente}. Trate-o pelo primeiro nome de forma natural.`
             : 'Você não conhece o nome do cliente. Seja cordial sem usar nomes próprios.';
 
+        const systemPrompt = `Você é o assistente virtual do estabelecimento ${config.nome || 'nosso restaurante'}. ${instrucaoNome}
+Informações: Endereço: ${config.endereco || 'Não informado'}. Horários: ${horariosFormatados}. Cardápio: ${config.link_cardapio || 'Não disponível online'}.
+
+REGRAS ABSOLUTAS:
+1. Se o cliente perguntar sobre pedido, entrega, entregador, localização ou tempo de chegada, SEMPRE chame consultar_status_pedido antes de responder. NUNCA invente status, nome de entregador, localização ou ETA — use apenas os dados retornados pela ferramenta.
+2. Se consultar_status_pedido retornar status NAO_ENCONTRADO, informe que não há pedidos ativos associados a este número.
+3. Se o cliente pedir explicitamente para falar com um humano ou atendente, chame transferir_para_atendente_humano imediatamente.
+4. Para novos pedidos, oriente a usar o link do cardápio.
+5. Para assuntos fora do contexto do estabelecimento, diga educadamente que não pode ajudar.
+6. NUNCA invente endereços, horários, preços ou qualquer dado que não esteja nestas instruções.`;
+
+        const tools: any[] = [
+            {
+                type: 'function',
+                function: {
+                    name: 'consultar_status_pedido',
+                    description: 'Consulta o status atual do pedido do cliente, incluindo nome do entregador, localização em tempo real e tempo estimado de chegada (ETA).',
+                    parameters: { type: 'object', properties: {}, required: [] }
+                }
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'transferir_para_atendente_humano',
+                    description: 'Transfere o atendimento para um operador humano quando o cliente solicitar explicitamente falar com um atendente ou humano.',
+                    parameters: { type: 'object', properties: {}, required: [] }
+                }
+            }
+        ];
+
+        const historyEntry = this.conversationHistories.get(jid);
+        const mensagensHistorico = historyEntry?.messages || [];
+
+        const messages: any[] = [
+            { role: 'system', content: systemPrompt },
+            ...mensagensHistorico,
+            { role: 'user', content: mensagemCliente }
+        ];
+
         const openai = new OpenAI({ apiKey: config.openai_key });
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: `Você é o assistente virtual do estabelecimento ${config.nome || 'nosso restaurante'}. ${instrucaoNome} Informações do estabelecimento: Endereço: ${config.endereco || 'Não informado'}. Horários: ${horariosFormatados}. Cardápio: ${config.link_cardapio || 'Não disponível online'}.\n\nREGRAS: Se o cliente quiser fazer um pedido, oriente a usar o link do cardápio. Se exigir falar com um humano/atendente, retorne ESTRITAMENTE a tag: [ACTION_HUMAN]. Se perguntar algo fora de contexto, diga educadamente que não pode ajudar. NUNCA invente nomes, endereços ou horários que não estejam nestas instruções.` },
-                { role: 'user', content: mensagemCliente }
-            ],
-            temperature: 0.5,
-        });
-        return completion.choices[0].message?.content || 'Desculpe, tive um problema ao processar sua resposta.';
+
+        for (let iteracoes = 0; iteracoes < 5; iteracoes++) {
+            const response = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages,
+                tools,
+                tool_choice: 'auto',
+                temperature: 0.3
+            });
+
+            const choice = response.choices[0];
+            const msg = choice.message;
+
+            if (choice.finish_reason === 'tool_calls' && msg.tool_calls?.length) {
+                messages.push(msg);
+
+                for (const toolCall of msg.tool_calls) {
+                    if (toolCall.function.name === 'transferir_para_atendente_humano') {
+                        this.addToHistory(jid, 'user', mensagemCliente);
+                        return { resposta: '', transferir: true };
+                    }
+
+                    if (toolCall.function.name === 'consultar_status_pedido') {
+                        const statusData = await this.buscarStatusPedidoCliente(jidParaBusca, config);
+                        broadcastLog('WHATSAPP', `[RASTREIO] status para ${jid.split('@')[0]}: ${statusData.status}`);
+                        messages.push({
+                            role: 'tool',
+                            tool_call_id: toolCall.id,
+                            content: JSON.stringify(statusData)
+                        });
+                    }
+                }
+            } else {
+                const resposta = msg.content || 'Desculpe, tive um problema ao processar sua resposta.';
+                this.addToHistory(jid, 'user', mensagemCliente);
+                this.addToHistory(jid, 'assistant', resposta);
+                return { resposta, transferir: false };
+            }
+        }
+
+        return { resposta: 'Desculpe, não consegui processar sua mensagem. Tente novamente.', transferir: false };
     }
 
-    private async buscarContextoPedidoCliente(jidOriginal: string, config: any, mensagemCliente: string): Promise<ContextoPedido | null> {
+    private async buscarStatusPedidoCliente(jidOriginal: string, config: any): Promise<StatusPedidoTool> {
         try {
             let jidNumber: string;
 
             if (jidOriginal.endsWith('@lid')) {
                 const lidKey = jidOriginal.split('@')[0];
                 const resolvedPhone = this.lidToPhone.get(lidKey);
-                if (!resolvedPhone) return null;
+                if (!resolvedPhone) return { status: 'NAO_ENCONTRADO' };
                 jidNumber = resolvedPhone.replace(/\D/g, '');
             } else {
                 const jidLimpo = jidNormalizedUser(jidOriginal);
                 jidNumber = jidLimpo.split('@')[0].replace(/\D/g, '');
             }
 
-            if (!jidNumber) return null;
+            if (!jidNumber) return { status: 'NAO_ENCONTRADO' };
 
             const pedidosRaw = await getPedidos();
-            if (!pedidosRaw?.length) return null;
+            if (!pedidosRaw?.length) return { status: 'NAO_ENCONTRADO' };
             const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
 
             const ultimos6 = jidNumber.slice(-6);
-
             const pedidosDoCliente = pedidos.filter((p: any) => {
                 const realNumber = (p.telefone || '').replace(/\D/g, '');
                 return realNumber.length >= 6 && ultimos6 === realNumber.slice(-6);
             });
 
-            if (!pedidosDoCliente.length) return null;
+            if (!pedidosDoCliente.length) return { status: 'NAO_ENCONTRADO' };
 
             const pedidoDoCliente = pedidosDoCliente.sort((a: any, b: any) =>
                 String(b.id ?? '').localeCompare(String(a.id ?? ''))
@@ -471,17 +547,10 @@ export class BaileysProvider implements WhatsAppProvider {
                 pac.pedidosIds?.includes(pedidoDoCliente.id) && statusAtivos.includes(pac.status)
             );
 
-            if (!pacote) return null;
+            if (!pacote) return { status: 'NAO_ENCONTRADO' };
 
-            if (pacote.status === 'AGUARDANDO') {
-                return { texto: 'Pedido em preparo.', nomeMotoboy: '', localizacao: '', fraseETA: '', status: 'AGUARDANDO',
-                    respostaDireta: 'Seu pedido está sendo preparado na cozinha! 👨‍🍳' };
-            }
-
-            if (pacote.status === 'PENDENTE_ACEITE') {
-                return { texto: 'Pedido pronto, aguardando entregador.', nomeMotoboy: '', localizacao: '', fraseETA: '', status: 'PENDENTE_ACEITE',
-                    respostaDireta: 'Seu pedido está pronto e aguardando o entregador confirmar a rota! 🛵' };
-            }
+            if (pacote.status === 'AGUARDANDO') return { status: 'AGUARDANDO' };
+            if (pacote.status === 'PENDENTE_ACEITE') return { status: 'PENDENTE_ACEITE' };
 
             if (pacote.status === 'EM_ROTA') {
                 const telegramId = pacote.motoboy?.telegram_id;
@@ -524,50 +593,18 @@ export class BaileysProvider implements WhatsAppProvider {
                     }
                 }
 
-                if (!localizacaoTexto && !fraseTempoEntrega) {
-                    return {
-                        texto: `EM ROTA — GPS offline`,
-                        nomeMotoboy: primeiroNome,
-                        localizacao: '',
-                        fraseETA: '',
-                        status: 'EM_ROTA',
-                        respostaDireta: `Seu pedido já saiu para entrega e chega em breve! 🛵`
-                    };
-                }
-
-                const msg = mensagemCliente.toLowerCase();
-                const querLocal = /onde|rua|bairro|regi[aã]o|endere[cç]o/.test(msg);
-                const querTempo = /demora|tempo|quanto falta|minutos|logo|j[aá] chega|chegando/.test(msg);
-
-                let respostaDireta: string;
-                if (querLocal) {
-                    respostaDireta = localizacaoTexto
-                        ? `${primeiroNome} está ${localizacaoTexto}.`
-                        : `${primeiroNome} está a caminho.`;
-                } else if (querTempo) {
-                    respostaDireta = fraseTempoEntrega
-                        ? `${fraseTempoEntrega.charAt(0).toUpperCase() + fraseTempoEntrega.slice(1)}.`
-                        : `${primeiroNome} está a caminho e chega em breve.`;
-                } else {
-                    respostaDireta = `Seu pedido está em rota de entrega com ${primeiroNome}.`;
-                }
-
-                const locLog = localizacaoTexto ? `${primeiroNome} está ${localizacaoTexto}` : `${primeiroNome} está a caminho`;
-                const etaLog = fraseTempoEntrega ? ` | ETA: ${fraseTempoEntrega}` : '';
                 return {
-                    texto: `EM ROTA — ${locLog}${etaLog}`,
-                    nomeMotoboy: primeiroNome,
-                    localizacao: localizacaoTexto,
-                    fraseETA: fraseTempoEntrega,
                     status: 'EM_ROTA',
-                    respostaDireta
+                    entregador: primeiroNome,
+                    localizacao: localizacaoTexto || undefined,
+                    eta: fraseTempoEntrega || undefined
                 };
             }
 
-            return null;
+            return { status: 'NAO_ENCONTRADO' };
         } catch (e) {
-            console.error('[DEBUG CONTEXTO_PEDIDO] Erro ao buscar contexto do pedido:', e);
-            return null;
+            console.error('[DEBUG BUSCAR_STATUS_PEDIDO] Erro:', e);
+            return { status: 'NAO_ENCONTRADO' };
         }
     }
 }

@@ -751,7 +751,7 @@ async function aceitar(){
     });
 
     app.post('/api/frota-compartilhada/convidar', async (request: any, reply) => {
-        const { telegram_id, no_url, pacoteId, pedidos, taxa_deslocamento_brl, distancia_km, nome } = request.body || {};
+        const { telegram_id, no_url, no_nome, pacoteId, pedidos, taxa_deslocamento_brl, distancia_km, nome } = request.body || {};
         if (!telegram_id || !no_url) return reply.code(400).send({ error: 'telegram_id e no_url s\u00e3o obrigat\u00f3rios.' });
 
         const motoboyLocal = await getMotoboyByTelegramId(telegram_id);
@@ -769,7 +769,7 @@ async function aceitar(){
         const valor_total = taxa_desl + taxa_entrega;
 
         if (no_url === 'GLOBAL') {
-            await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE' });
+            await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE', no_url: 'GLOBAL', no_nome: no_nome || nome || telegram_id, taxa_deslocamento: taxa_desl, distancia_km: distancia_km || 0 });
             await broadcastLog('FROTA', `Parceiro Global ${nome || telegram_id} adicionado provisoriamente \u00e0 frota.`);
 
             if (pacoteId) {
@@ -812,7 +812,9 @@ async function aceitar(){
                     taxa_deslocamento_brl: taxa_desl,
                     taxa_entrega,
                     valor_total,
-                    pacote_id: pacoteId || ''
+                    pacote_id: pacoteId || '',
+                    no_url,
+                    no_nome: no_nome || loja_nome
                 }),
                 signal: AbortSignal.timeout(8000)
             });
@@ -828,11 +830,19 @@ async function aceitar(){
     });
 
     app.post('/api/frota-compartilhada/repassar-convite', async (request: any, reply) => {
-        const { telegram_id, loja_nome, loja_bot_link, pedidos_resumo, taxa_total, distancia_km, taxa_deslocamento_brl, taxa_entrega, valor_total, pacote_id } = request.body || {};
+        const { telegram_id, loja_nome, loja_bot_link, pedidos_resumo, taxa_total, distancia_km, taxa_deslocamento_brl, taxa_entrega, valor_total, pacote_id, no_url: motoboy_no_url, no_nome: motoboy_no_nome } = request.body || {};
         if (!telegram_id || !loja_nome) return reply.code(400).send({ error: 'Dados insuficientes.' });
 
         const motoboy = await getMotoboyByTelegramId(telegram_id);
         if (!motoboy) return reply.code(404).send({ error: 'Motoboy n\u00e3o encontrado neste n\u00f3.' });
+
+        await upsertFleet({
+            telegram_id,
+            no_url: motoboy_no_url || null,
+            no_nome: motoboy_no_nome || loja_nome,
+            taxa_deslocamento: Number(taxa_deslocamento_brl || taxa_total || 0),
+            distancia_km: Number(distancia_km || 0)
+        });
 
         if (pacote_id) {
             const pacotesRaw = await getPacotes();

@@ -61,6 +61,10 @@ export async function initDatabase(): Promise<Database> {
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN pagamento_pendente INTEGER DEFAULT 0;'); } catch (e) {}
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN pendente_desde TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN ultima_nota REAL;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE motoboys ADD COLUMN no_url TEXT;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE motoboys ADD COLUMN no_nome TEXT;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE motoboys ADD COLUMN taxa_deslocamento REAL;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE motoboys ADD COLUMN distancia_km REAL;'); } catch (e) {}
 
         await database.exec(`
             CREATE TABLE IF NOT EXISTS entregas (
