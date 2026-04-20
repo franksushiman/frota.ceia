@@ -55,7 +55,9 @@ export class BaileysProvider implements WhatsAppProvider {
     private conversationHistories = new Map<string, ConversationEntry>();
 
     public setClienteSAC(jid: string, ativo: boolean): void {
-        const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
+        // Normalizar exactamente como jidNormalized em messages.upsert para que has() não falhe
+        const raw = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
+        const normalizado = jidNormalizedUser(raw);
         if (ativo) {
             this.sacAtivos.add(normalizado);
             // Derruba a linha direta do motoboy e notifica-o, se existir
