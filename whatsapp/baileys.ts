@@ -58,12 +58,10 @@ export class BaileysProvider implements WhatsAppProvider {
         const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
         if (ativo) {
             this.sacAtivos.add(normalizado);
-            // Se o motoboy ainda tem a linha direta aberta com este cliente, derruba-a
+            // Derruba a linha direta do motoboy e notifica-o, se existir
             const contexto = this.contextCache.get(normalizado);
-            if (contexto) {
-                encerrarChatClientePeloPainel(contexto.telegramId);
-                this.contextCache.delete(normalizado);
-            }
+            if (contexto) encerrarChatClientePeloPainel(contexto.telegramId);
+            this.contextCache.delete(normalizado); // sempre limpa, independente de existir cache
         } else {
             this.sacAtivos.delete(normalizado);
             const session = this.customerSessionCache.get(normalizado);
@@ -256,6 +254,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
             // ROTEAMENTO 0: OPERADOR EM ATENDIMENTO SAC (prioridade máxima)
             if (this.sacAtivos.has(jidNormalized)) {
+                this.contextCache.delete(jidNormalized); // garante que a linha do motoboy morre imediatamente
                 broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
                 return;
             }
