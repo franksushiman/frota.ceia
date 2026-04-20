@@ -176,7 +176,7 @@ export class BaileysProvider implements WhatsAppProvider {
             const configKS = await getConfiguracoes();
             if (configKS.whatsapp_ativo === false || configKS.whatsapp_ativo === 0) return;
 
-            const numeroNormalizado = this.normalizePhone(numeroCliente);
+            let numeroNormalizado = this.normalizePhone(numeroCliente);
             await this.sock!.readMessages([msg.key]);
 
             const isAudio = !!(msg.message.audioMessage || msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage);
@@ -202,7 +202,21 @@ export class BaileysProvider implements WhatsAppProvider {
             const candidatoJid = (jidAlt && !jidAlt.includes('@lid')) ? jidAlt
                                : (participant && !participant.includes('@lid')) ? participant
                                : null;
-            const jidParaBusca = candidatoJid ?? numeroCliente;
+            let jidParaBusca = candidatoJid ?? numeroCliente;
+
+            // Resolve @lid → JID real para iPhone / Multi-device: o remoteJid chega como
+            // <id>@lid em vez do número real, fazendo com que os caches de roteamento falhem.
+            const rawNorm = jidNormalizedUser(msg.key.remoteJid!);
+            if (rawNorm.endsWith('@lid')) {
+                const lidKey = rawNorm.split('@')[0];
+                const realPhone = this.lidToPhone.get(lidKey);
+                if (realPhone) {
+                    const cleanPhone = realPhone.replace(/\D/g, '');
+                    numeroNormalizado = cleanPhone;
+                    jidParaBusca = cleanPhone + '@s.whatsapp.net';
+                }
+            }
+
             const numeroExibicao = jidParaBusca.split('@')[0];
 
             broadcastLog('WHATSAPP', `Recebido de [${numeroExibicao}]: ${mensagemTexto || 'Localização'}`);
@@ -232,7 +246,7 @@ export class BaileysProvider implements WhatsAppProvider {
             }
 
             // ROTEAMENTO 0: OPERADOR EM ATENDIMENTO SAC (prioridade máxima)
-            const jidNorm0 = jidNormalizedUser(msg.key.remoteJid!);
+            const jidNorm0 = jidNormalizedUser(jidParaBusca);
             if (this.sacAtivos.has(jidNorm0)) {
                 broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNorm0, nome: msg.pushName || numeroNormalizado });
                 return;
