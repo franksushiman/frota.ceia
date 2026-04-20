@@ -29,6 +29,16 @@ export async function iniciarChatOperador(telegram_id: string, nome: string): Pr
     }
 }
 
+export async function encerrarChatClientePeloPainel(telegram_id: string): Promise<void> {
+    const chatId = Number(telegram_id);
+    if (userSessions[chatId]?.step === 'CHAT_CLIENTE') {
+        delete userSessions[chatId];
+        await enviarMensagemTelegram(telegram_id,
+            '⚠️ *Aviso:* A base (operador) assumiu o atendimento deste cliente no painel. Sua linha direta foi encerrada. Se precisar, clique em \'Falar com Cliente\' novamente.'
+        );
+    }
+}
+
 export async function enviarMensagemTelegram(telegram_id: string, texto: string) {
     if (bot === null) { console.error("[DEBUG TELEGRAM] ERRO FATAL: O bot esta null na hora de enviar"); return false; }
     try {

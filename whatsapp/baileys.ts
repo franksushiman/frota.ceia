@@ -9,7 +9,7 @@ import { getConfiguracoes, getMotoboysOnline, getPedidos, getPacotes, getFleet, 
 import { getRotaPeloCliente } from '../operacao';
 import { broadcastLog } from '../logger';
 import { WhatsAppProvider, ProviderState } from './types';
-import { enviarMensagemTelegram } from '../telegramBot';
+import { enviarMensagemTelegram, encerrarChatClientePeloPainel } from '../telegramBot';
 
 // Rastreia o último motoboy Nuvem que atendeu cada cliente (jid → telegram_id)
 const ultimoNuvemPorCliente = new Map<string, string>();
@@ -58,6 +58,12 @@ export class BaileysProvider implements WhatsAppProvider {
         const normalizado = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
         if (ativo) {
             this.sacAtivos.add(normalizado);
+            // Se o motoboy ainda tem a linha direta aberta com este cliente, derruba-a
+            const contexto = this.contextCache.get(normalizado);
+            if (contexto) {
+                encerrarChatClientePeloPainel(contexto.telegramId);
+                this.contextCache.delete(normalizado);
+            }
         } else {
             this.sacAtivos.delete(normalizado);
             const session = this.customerSessionCache.get(normalizado);
