@@ -245,10 +245,12 @@ export class BaileysProvider implements WhatsAppProvider {
                 }
             }
 
+            // JID resolvido usado por todos os roteamentos abaixo
+            const jidNormalized = jidNormalizedUser(jidParaBusca);
+
             // ROTEAMENTO 0: OPERADOR EM ATENDIMENTO SAC (prioridade máxima)
-            const jidNorm0 = jidNormalizedUser(jidParaBusca);
-            if (this.sacAtivos.has(jidNorm0)) {
-                broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNorm0, nome: msg.pushName || numeroNormalizado });
+            if (this.sacAtivos.has(jidNormalized)) {
+                broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
                 return;
             }
 
@@ -273,7 +275,6 @@ export class BaileysProvider implements WhatsAppProvider {
             }
 
             // ROTEAMENTO 2: CHAT BLINDADO (Cache da Linha Direta)
-            const jidNormalized = jidNorm0;
 
             if (this.contextCache.has(jidNormalized)) {
                 const contextoEncontrado = this.contextCache.get(jidNormalized)!;
