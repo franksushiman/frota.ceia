@@ -35,6 +35,10 @@ export function setClienteSAC(jid: string, ativo: boolean, nome?: string): void 
     provider.setClienteSAC(jid, ativo, nome);
 }
 
+export function clienteEmSAC(numero: string): boolean {
+    return provider.clienteEmSAC(numero);
+}
+
 export async function enviarMensagemWhatsApp(
     numero: string,
     texto: string,

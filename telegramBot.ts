@@ -2,7 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { upsertFleet, getConfiguracoes, getMotoboyByTelegramId, getPacotes, getPedidos, savePacote, deletarMotoboy, atualizarCamposMotoboy, validarEUsarToken } from './database';
 import { broadcastLog } from './logger';
 import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
-import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente } from './whatsapp/index';
+import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente, clienteEmSAC } from './whatsapp/index';
 
 type Step = 'NOME' | 'WHATSAPP' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
 
@@ -280,8 +280,15 @@ Vamos iniciar seu cadastro. Por favor, digite seu **Nome Completo**:`, Markup.re
             const rota = rotas.find(r => r.pedido.id === pedidoId);
             
             if (!rota) return ctx.answerCbQuery('Pedido n\u00e3o encontrado ou j\u00e1 finalizado.');
-            
-            userSessions[chatId] = { step: "CHAT_CLIENTE", data: { telefone_cliente: rota.pedido.telefone || rota.pedido.telefoneCliente || rota.pedido.whatsapp || rota.pedido.telefone_cliente, nome_cliente: rota.pedido.nomeCliente } };
+
+            const telefoneCliente = rota.pedido.telefone || rota.pedido.telefoneCliente || rota.pedido.whatsapp || rota.pedido.telefone_cliente;
+            if (clienteEmSAC(telefoneCliente)) {
+                await ctx.answerCbQuery();
+                await ctx.reply('\ud83d\udd12 O atendimento deste cliente est\u00e1 com o operador da base no momento. Aguarde o operador encerrar para falar direto com o cliente.');
+                return;
+            }
+
+            userSessions[chatId] = { step: "CHAT_CLIENTE", data: { telefone_cliente: telefoneCliente, nome_cliente: rota.pedido.nomeCliente } };
             
             await ctx.editMessageText(`Aberta linha direta com *${rota.pedido.nomeCliente.split(' ')[0]}*.\\
 \\

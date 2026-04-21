@@ -54,6 +54,15 @@ export class BaileysProvider implements WhatsAppProvider {
     private sacAtivos = new Set<string>();
     private sacNomes = new Map<string, string>();
     private conversationHistories = new Map<string, ConversationEntry>();
+    private contextCacheTimers = new Map<string, NodeJS.Timeout>();
+    private readonly CONTEXT_TTL_MS = 40 * 1000;
+
+    public clienteEmSAC(numero: string): boolean {
+        const limpo = this.normalizePhone(numero);
+        const jid = (limpo.startsWith('55') ? limpo : '55' + limpo) + '@s.whatsapp.net';
+        const normalizado = jidNormalizedUser(jid);
+        return this.matchClienteBySuffix(normalizado, this.sacAtivos);
+    }
 
     public setClienteSAC(jid: string, ativo: boolean, nome?: string): void {
         const raw = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
@@ -73,13 +82,12 @@ export class BaileysProvider implements WhatsAppProvider {
                     timeout: setTimeout(() => this.customerSessionCache.delete(normalizado), 15 * 60 * 1000)
                 });
             }
-            // Derruba a linha direta do motoboy e notifica-o, se existir
-            const contexto = this.findContextBySuffix(normalizado);
-            if (contexto) {
-                encerrarChatClientePeloPainel(contexto.telegramId);
-                for (const [key, ctx] of this.contextCache.entries()) {
-                    if (ctx === contexto) { this.contextCache.delete(key); break; }
-                }
+            const achado = this.findContextBySuffix(normalizado);
+            if (achado) {
+                encerrarChatClientePeloPainel(achado.ctx.telegramId);
+                this.contextCache.delete(achado.key);
+                const t = this.contextCacheTimers.get(achado.key);
+                if (t) { clearTimeout(t); this.contextCacheTimers.delete(achado.key); }
             }
         } else {
             this.sacAtivos.delete(normalizado);
@@ -289,33 +297,27 @@ export class BaileysProvider implements WhatsAppProvider {
                 return;
             }
 
-            // ROTEAMENTO 1: CLIENTE TEM UMA ROTA ATIVA (Bypass da IA)
-            const rota = await getRotaPeloCliente(numeroNormalizado);
-            if (rota && rota.telegram_id) {
-                const motoboyRota = await getMotoboyByTelegramId(rota.telegram_id);
-                if (motoboyRota?.vinculo === 'Nuvem') {
-                    ultimoNuvemPorCliente.set(jidParaBusca, rota.telegram_id);
-                }
-
-                if (location) {
+            // EXCEÇÃO GPS: localização em rota ativa, só se não há contextCache ativo
+            // (SAC já foi descartado em R0 — se chegou aqui, não está em atendimento)
+            if (location && !this.findContextBySuffix(jidNormalized)) {
+                const rota = await getRotaPeloCliente(numeroNormalizado);
+                if (rota && rota.telegram_id) {
+                    const motoboyRota = await getMotoboyByTelegramId(rota.telegram_id);
+                    if (motoboyRota?.vinculo === 'Nuvem') {
+                        ultimoNuvemPorCliente.set(jidParaBusca, rota.telegram_id);
+                    }
                     const mapsLink = `https://www.google.com/maps?q=${location.degreesLatitude},${location.degreesLongitude}`;
                     await enviarMensagemTelegram(rota.telegram_id, `📍 Localização enviada pelo cliente: ${mapsLink}`);
                     return;
                 }
-
-                const prefixo = isAudio ? '🎙️ Áudio do Cliente:\n' : '🗣️ Cliente: ';
-                await enviarMensagemTelegram(rota.telegram_id, prefixo + mensagemTexto);
-                broadcastLog('TELEGRAM', `Mensagem do cliente ${numeroNormalizado} enviada diretamente ao motoboy.`);
-                return;
             }
 
             // ROTEAMENTO 2: CHAT BLINDADO (Cache da Linha Direta)
-
-            if (this.contextCache.has(jidNormalized)) {
-                const contextoEncontrado = this.contextCache.get(jidNormalized)!;
+            const achado = this.findContextBySuffix(jidNormalized);
+            if (achado) {
                 const prefixo = isAudio ? '🎙️ Áudio do Cliente:\n' : '🗣️ Cliente: ';
-                await enviarMensagemTelegram(contextoEncontrado.telegramId, prefixo + mensagemTexto);
-                broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada via cache para ${contextoEncontrado.motoboyName}.`);
+                await enviarMensagemTelegram(achado.ctx.telegramId, prefixo + mensagemTexto);
+                broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada via cache para ${achado.ctx.motoboyName}.`);
                 return;
             }
 
@@ -387,13 +389,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
             if (telegramId !== 'SISTEMA') {
                 this.contextCache.set(realJid, { telegramId, motoboyName, lastMotoboyMessage: motoboyMessage, timestamp: Date.now() });
-
-                setTimeout(() => {
-                    const cache = this.contextCache.get(realJid);
-                    if (cache && Date.now() - cache.timestamp >= 14 * 60 * 1000) {
-                        this.contextCache.delete(realJid);
-                    }
-                }, 15 * 60 * 1000);
+                this.armarTimerContexto(realJid);
             }
 
             return realJid ?? null;
@@ -433,16 +429,35 @@ export class BaileysProvider implements WhatsAppProvider {
         return undefined;
     }
 
-    private findContextBySuffix(jidBusca: string): ChatContext | undefined {
-        if (this.contextCache.has(jidBusca)) return this.contextCache.get(jidBusca);
+    private findContextBySuffix(jidBusca: string): { key: string; ctx: ChatContext } | undefined {
+        const direto = this.contextCache.get(jidBusca);
+        if (direto) return { key: jidBusca, ctx: direto };
         const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
         if (numBusca.length < 6) return undefined;
-        const ultimos6Busca = numBusca.slice(-6);
-        for (const [jidKey, contexto] of this.contextCache.entries()) {
-            const numKey = jidKey.split('@')[0].replace(/\D/g, '');
-            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6Busca) return contexto;
+        const ultimos6 = numBusca.slice(-6);
+        for (const [key, ctx] of this.contextCache.entries()) {
+            const numKey = key.split('@')[0].replace(/\D/g, '');
+            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6) return { key, ctx };
         }
         return undefined;
+    }
+
+    private armarTimerContexto(realJid: string): void {
+        const existente = this.contextCacheTimers.get(realJid);
+        if (existente) clearTimeout(existente);
+        const timer = setTimeout(async () => {
+            const ctx = this.contextCache.get(realJid);
+            if (!ctx) return;
+            this.contextCache.delete(realJid);
+            this.contextCacheTimers.delete(realJid);
+            try {
+                await enviarMensagemTelegram(
+                    ctx.telegramId,
+                    '⏱️ Linha direta com o cliente expirou por inatividade (40 segundos sem mensagem). Se precisar continuar, clique novamente em "Falar com Cliente".'
+                );
+            } catch (_) {}
+        }, this.CONTEXT_TTL_MS);
+        this.contextCacheTimers.set(realJid, timer);
     }
 
     private manageCustomerSession(jid: string): CustomerSession {
