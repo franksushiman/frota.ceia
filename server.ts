@@ -470,9 +470,9 @@ async function aceitar(){
     });
 
     app.post('/api/sac/iniciar', async (request: any, reply) => {
-        const { jid } = request.body || {};
+        const { jid, nome } = request.body || {};
         if (!jid) return reply.code(400).send({ error: 'jid é obrigatório.' });
-        setClienteSAC(jid, true);
+        setClienteSAC(jid, true, nome);
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 

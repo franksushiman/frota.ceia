@@ -754,7 +754,7 @@
                 await fetch('/api/sac/iniciar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ jid })
+                    body: JSON.stringify({ jid, nome })
                 });
             } catch (e) {}
             jidSACAtual = jid;

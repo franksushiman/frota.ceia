@@ -52,13 +52,15 @@ export class BaileysProvider implements WhatsAppProvider {
     private lidToPhone = new Map<string, string>();
     private customerSessionCache = new Map<string, CustomerSession>();
     private sacAtivos = new Set<string>();
+    private sacNomes = new Map<string, string>();
     private conversationHistories = new Map<string, ConversationEntry>();
 
-    public setClienteSAC(jid: string, ativo: boolean): void {
+    public setClienteSAC(jid: string, ativo: boolean, nome?: string): void {
         const raw = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
         const normalizado = jidNormalizedUser(raw);
         if (ativo) {
             this.sacAtivos.add(normalizado);
+            if (nome) this.sacNomes.set(normalizado, nome);
             // Garante que session.mode === 'HUMAN' para bloquear ROTEAMENTO 1 (rota ativa no BD)
             const sessaoExistente = this.customerSessionCache.get(normalizado);
             if (sessaoExistente) {
@@ -81,6 +83,7 @@ export class BaileysProvider implements WhatsAppProvider {
             }
         } else {
             this.sacAtivos.delete(normalizado);
+            this.sacNomes.delete(normalizado);
             const session = this.customerSessionCache.get(normalizado);
             if (session) { clearTimeout(session.timeout); this.customerSessionCache.delete(normalizado); }
             const history = this.conversationHistories.get(normalizado);
@@ -279,9 +282,10 @@ export class BaileysProvider implements WhatsAppProvider {
             const session = this.manageCustomerSession(jidNormalized);
             const emAtendimentoSAC = this.matchClienteBySuffix(jidNormalized, this.sacAtivos) || session.mode === 'HUMAN';
             if (emAtendimentoSAC) {
-                this.sacAtivos.add(jidNormalized); // sincroniza sacAtivos se só veio pelo session
+                this.sacAtivos.add(jidNormalized);
                 this.contextCache.delete(jidNormalized);
-                broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
+                const nomeExibicao = this.sacNomes.get(jidNormalized) || msg.pushName || numeroNormalizado;
+                broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: nomeExibicao });
                 return;
             }
 
