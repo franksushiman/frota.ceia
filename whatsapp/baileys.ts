@@ -221,18 +221,22 @@ export class BaileysProvider implements WhatsAppProvider {
                                : null;
             let jidParaBusca = candidatoJid ?? numeroCliente;
 
-            // Resolve @lid → JID real para iPhone / Multi-device: o remoteJid chega como
-            // <id>@lid em vez do número real, fazendo com que os caches de roteamento falhem.
+            // Resolve @lid → JID real para iPhone / Multi-device.
+            // Só sobrescreve jidParaBusca via lidToPhone se candidatoJid NÃO forneceu
+            // um telefone real — evita conflito entre formato 8-dígitos do pedido vs
+            // 9-dígitos registrado no WhatsApp / lidToPhone.
             const rawNorm = jidNormalizedUser(msg.key.remoteJid!);
-            if (rawNorm.endsWith('@lid')) {
+            if (rawNorm.endsWith('@lid') && !candidatoJid) {
                 const lidKey = rawNorm.split('@')[0];
                 const realPhone = this.lidToPhone.get(lidKey);
                 if (realPhone) {
-                    const cleanPhone = realPhone.replace(/\D/g, '');
-                    numeroNormalizado = cleanPhone;
-                    jidParaBusca = cleanPhone + '@s.whatsapp.net';
+                    jidParaBusca = realPhone.replace(/\D/g, '') + '@s.whatsapp.net';
                 }
             }
+
+            // Derivar numeroNormalizado de jidParaBusca (fonte única de verdade após
+            // resolução @lid) — evita que o valor lid vaze para R1/R2.
+            numeroNormalizado = this.normalizePhone(jidParaBusca);
 
             const numeroExibicao = jidParaBusca.split('@')[0];
 

@@ -484,6 +484,7 @@ async function aceitar(){
 
     app.post('/api/sac/reply', async (request: any, reply) => {
         const { jid, texto } = request.body;
+        if (jid) setClienteSAC(jid, true); // idempotente — defesa se /iniciar foi pulado
         const sucesso = await enviarMensagemWhatsApp(jid, texto, 'SISTEMA', 'atendimento_humano', 'Atendente');
         if (sucesso) return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
         return reply.code(500).type('application/json; charset=utf-8').send({ error: 'Falha no envio da mensagem via WhatsApp.' });

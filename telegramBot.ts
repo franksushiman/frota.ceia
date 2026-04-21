@@ -33,10 +33,11 @@ export async function encerrarChatClientePeloPainel(telegram_id: string): Promis
     const chatId = Number(telegram_id);
     if (userSessions[chatId]?.step === 'CHAT_CLIENTE') {
         delete userSessions[chatId];
-        await enviarMensagemTelegram(telegram_id,
-            '⚠️ *Aviso:* A base (operador) assumiu o atendimento deste cliente no painel. Sua linha direta foi encerrada. Se precisar, clique em \'Falar com Cliente\' novamente.'
-        );
     }
+    // Avisa sempre — se contextCache apontava para este motoboy, a linha direta existia
+    await enviarMensagemTelegram(telegram_id,
+        '⚠️ *Aviso:* A base (operador) assumiu o atendimento deste cliente no painel. Sua linha direta foi encerrada. Se precisar, clique em \'Falar com Cliente\' novamente.'
+    );
 }
 
 export async function enviarMensagemTelegram(telegram_id: string, texto: string) {
