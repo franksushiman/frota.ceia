@@ -273,7 +273,7 @@ export class BaileysProvider implements WhatsAppProvider {
             // Verifica sacAtivos (via API/dashboard) OU session.mode=HUMAN (via IA)
             // DEVE ficar antes de ROTEAMENTO 1 para bloquear rota ativa no BD
             const session = this.manageCustomerSession(jidNormalized);
-            const emAtendimentoSAC = this.sacAtivos.has(jidNormalized) || session.mode === 'HUMAN';
+            const emAtendimentoSAC = this.matchClienteBySuffix(jidNormalized, this.sacAtivos) || session.mode === 'HUMAN';
             if (emAtendimentoSAC) {
                 this.sacAtivos.add(jidNormalized); // sincroniza sacAtivos se só veio pelo session
                 this.contextCache.delete(jidNormalized);
@@ -398,6 +398,18 @@ export class BaileysProvider implements WhatsAppProvider {
     private normalizePhone(input: string): string {
         if (!input) return '';
         return input.includes('@') ? input.split('@')[0] : input.replace(/\D/g, '');
+    }
+
+    private matchClienteBySuffix(jidBusca: string, jidsSet: Set<string>): boolean {
+        if (jidsSet.has(jidBusca)) return true;
+        const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
+        if (numBusca.length < 6) return false;
+        const ultimos6Busca = numBusca.slice(-6);
+        for (const jidCandidato of jidsSet) {
+            const numCandidato = jidCandidato.split('@')[0].replace(/\D/g, '');
+            if (numCandidato.length >= 6 && numCandidato.slice(-6) === ultimos6Busca) return true;
+        }
+        return false;
     }
 
     private manageCustomerSession(jid: string): CustomerSession {
