@@ -284,7 +284,7 @@ export class BaileysProvider implements WhatsAppProvider {
             if (emAtendimentoSAC) {
                 this.sacAtivos.add(jidNormalized);
                 this.contextCache.delete(jidNormalized);
-                const nomeExibicao = this.sacNomes.get(jidNormalized) || msg.pushName || numeroNormalizado;
+                const nomeExibicao = this.findValueBySuffix(jidNormalized, this.sacNomes) || msg.pushName || numeroNormalizado;
                 broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: nomeExibicao });
                 return;
             }
@@ -418,6 +418,19 @@ export class BaileysProvider implements WhatsAppProvider {
             if (numCandidato.length >= 6 && numCandidato.slice(-6) === ultimos6Busca) return true;
         }
         return false;
+    }
+
+    private findValueBySuffix<T>(jidBusca: string, map: Map<string, T>): T | undefined {
+        const direto = map.get(jidBusca);
+        if (direto !== undefined) return direto;
+        const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
+        if (numBusca.length < 6) return undefined;
+        const ultimos6Busca = numBusca.slice(-6);
+        for (const [jidKey, valor] of map.entries()) {
+            const numKey = jidKey.split('@')[0].replace(/\D/g, '');
+            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6Busca) return valor;
+        }
+        return undefined;
     }
 
     private findContextBySuffix(jidBusca: string): ChatContext | undefined {
