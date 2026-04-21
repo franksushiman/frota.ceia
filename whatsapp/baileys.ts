@@ -55,15 +55,26 @@ export class BaileysProvider implements WhatsAppProvider {
     private conversationHistories = new Map<string, ConversationEntry>();
 
     public setClienteSAC(jid: string, ativo: boolean): void {
-        // Normalizar exactamente como jidNormalized em messages.upsert para que has() não falhe
         const raw = jid.includes('@') ? jid : jid + '@s.whatsapp.net';
         const normalizado = jidNormalizedUser(raw);
         if (ativo) {
             this.sacAtivos.add(normalizado);
+            // Garante que session.mode === 'HUMAN' para bloquear ROTEAMENTO 1 (rota ativa no BD)
+            const sessaoExistente = this.customerSessionCache.get(normalizado);
+            if (sessaoExistente) {
+                clearTimeout(sessaoExistente.timeout);
+                sessaoExistente.mode = 'HUMAN';
+                sessaoExistente.timeout = setTimeout(() => this.customerSessionCache.delete(normalizado), 15 * 60 * 1000);
+            } else {
+                this.customerSessionCache.set(normalizado, {
+                    mode: 'HUMAN',
+                    timeout: setTimeout(() => this.customerSessionCache.delete(normalizado), 15 * 60 * 1000)
+                });
+            }
             // Derruba a linha direta do motoboy e notifica-o, se existir
             const contexto = this.contextCache.get(normalizado);
             if (contexto) encerrarChatClientePeloPainel(contexto.telegramId);
-            this.contextCache.delete(normalizado); // sempre limpa, independente de existir cache
+            this.contextCache.delete(normalizado);
         } else {
             this.sacAtivos.delete(normalizado);
             const session = this.customerSessionCache.get(normalizado);
@@ -255,8 +266,13 @@ export class BaileysProvider implements WhatsAppProvider {
             const jidNormalized = jidNormalizedUser(jidParaBusca);
 
             // ROTEAMENTO 0: OPERADOR EM ATENDIMENTO SAC (prioridade máxima)
-            if (this.sacAtivos.has(jidNormalized)) {
-                this.contextCache.delete(jidNormalized); // garante que a linha do motoboy morre imediatamente
+            // Verifica sacAtivos (via API/dashboard) OU session.mode=HUMAN (via IA)
+            // DEVE ficar antes de ROTEAMENTO 1 para bloquear rota ativa no BD
+            const session = this.manageCustomerSession(jidNormalized);
+            const emAtendimentoSAC = this.sacAtivos.has(jidNormalized) || session.mode === 'HUMAN';
+            if (emAtendimentoSAC) {
+                this.sacAtivos.add(jidNormalized); // sincroniza sacAtivos se só veio pelo session
+                this.contextCache.delete(jidNormalized);
                 broadcastLog('SAC_MSG', mensagemTexto || '[Localização]', { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
                 return;
             }
@@ -288,13 +304,6 @@ export class BaileysProvider implements WhatsAppProvider {
                 const prefixo = isAudio ? '🎙️ Áudio do Cliente:\n' : '🗣️ Cliente: ';
                 await enviarMensagemTelegram(contextoEncontrado.telegramId, prefixo + mensagemTexto);
                 broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada via cache para ${contextoEncontrado.motoboyName}.`);
-                return;
-            }
-
-            const session = this.manageCustomerSession(jidNormalized);
-
-            if (session.mode === 'HUMAN') {
-                broadcastLog('SAC_MSG', mensagemTexto, { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
                 return;
             }
 
