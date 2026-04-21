@@ -72,9 +72,13 @@ export class BaileysProvider implements WhatsAppProvider {
                 });
             }
             // Derruba a linha direta do motoboy e notifica-o, se existir
-            const contexto = this.contextCache.get(normalizado);
-            if (contexto) encerrarChatClientePeloPainel(contexto.telegramId);
-            this.contextCache.delete(normalizado);
+            const contexto = this.findContextBySuffix(normalizado);
+            if (contexto) {
+                encerrarChatClientePeloPainel(contexto.telegramId);
+                for (const [key, ctx] of this.contextCache.entries()) {
+                    if (ctx === contexto) { this.contextCache.delete(key); break; }
+                }
+            }
         } else {
             this.sacAtivos.delete(normalizado);
             const session = this.customerSessionCache.get(normalizado);
@@ -410,6 +414,18 @@ export class BaileysProvider implements WhatsAppProvider {
             if (numCandidato.length >= 6 && numCandidato.slice(-6) === ultimos6Busca) return true;
         }
         return false;
+    }
+
+    private findContextBySuffix(jidBusca: string): ChatContext | undefined {
+        if (this.contextCache.has(jidBusca)) return this.contextCache.get(jidBusca);
+        const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
+        if (numBusca.length < 6) return undefined;
+        const ultimos6Busca = numBusca.slice(-6);
+        for (const [jidKey, contexto] of this.contextCache.entries()) {
+            const numKey = jidKey.split('@')[0].replace(/\D/g, '');
+            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6Busca) return contexto;
+        }
+        return undefined;
     }
 
     private manageCustomerSession(jid: string): CustomerSession {
