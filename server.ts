@@ -39,7 +39,25 @@ import { initLogger, broadcastLog } from './logger';
 
 
 const HUB_URL = process.env.HUB_URL;
+const NODE_TOKEN = process.env.NODE_TOKEN;
 const LOJA_URL = process.env.LOJA_URL ?? '';
+
+if (!NODE_TOKEN) console.warn('[CEIA] WARNING: NODE_TOKEN não definido — requisições ao Hub serão rejeitadas.');
+
+async function hubFetch(path: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; data: any }> {
+    if (!HUB_URL) throw new Error('HUB_URL não configurado.');
+    const url = `${HUB_URL}/wp-json/ceia/v1${path}`;
+    const headers: Record<string, string> = {
+        'X-Ceia-Node-Token': NODE_TOKEN || '',
+        ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(init.headers as Record<string, string> || {})
+    };
+    const res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(8000) });
+    let data: any;
+    try { data = await res.json(); } catch { data = {}; }
+    if (!res.ok) throw new Error(`Hub respondeu ${res.status}: ${JSON.stringify(data)}`);
+    return { ok: res.ok, status: res.status, data };
+}
 
 export const app: FastifyInstance = Fastify({ logger: false });
 
@@ -55,7 +73,7 @@ export async function startServer() {
     // \u2500\u2500 JWT middleware: protege todas as rotas /api/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     app.addHook('onRequest', async (request: any, reply) => {
         const url = request.url.split('?')[0];
-        const publicEndpoints = ['/api/profile/public', '/api/frota-compartilhada/disponiveis', '/api/frota-compartilhada/repassar-convite'];
+        const publicEndpoints = ['/api/profile/public', '/api/frota-compartilhada/disponiveis'];
         if (!url.startsWith('/api/') || publicEndpoints.includes(url)) return;
         const token: string | undefined = request.cookies?.ceia_token;
         if (!token) {
@@ -801,18 +819,8 @@ async function aceitar(){
         try {
             const lojaLat = config?.lat;
             const lojaLng = config?.lng;
-            const buscarUrl = `${HUB_URL}/buscar?lat=${lojaLat || 0}&lng=${lojaLng || 0}`;
-            console.log('[BUSCAR NUVEM] URL do fetch:', buscarUrl);
-            const res = await fetch(buscarUrl, {
-                signal: AbortSignal.timeout(8000)
-            });
-            const bodyText = await res.text();
-            console.log('[BUSCAR NUVEM] Status HTTP:', res.status);
-            console.log('[BUSCAR NUVEM] Body:', bodyText);
-            if (!res.ok) {
-                return reply.code(502).send({ error: 'Falha ao consultar o Hub Central.' });
-            }
-            const resultados = JSON.parse(bodyText);
+            console.log('[BUSCAR NUVEM] lat:', lojaLat, 'lng:', lojaLng);
+            const { data: resultados } = await hubFetch(`/buscar?lat=${lojaLat || 0}&lng=${lojaLng || 0}`);
             return reply.send(resultados);
         } catch (e) {
             console.error('[FROTA COMPARTILHADA] Hub Central inacess\u00edvel:', e);
@@ -831,9 +839,7 @@ async function aceitar(){
 
         const config = await getConfiguracoes();
         const loja_nome = config?.nome || 'Loja Parceira';
-        const bot_username = config?.telegram_bot_token ? 'bot' : null;
 
-        const pedidos_resumo = (pedidos || []).map((p: any) => `${p.nomeCliente} \u2014 ${p.endereco}`).join('\n');
         const taxa_entrega = (pedidos || []).reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
         const taxa_desl = taxa_deslocamento_brl || 0;
         const valor_total = taxa_desl + taxa_entrega;
@@ -869,75 +875,33 @@ async function aceitar(){
         }
 
         try {
-            const res = await fetch(`${no_url}/api/frota-compartilhada/repassar-convite`, {
+            await hubFetch('/rota/criar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    pacote_id: pacoteId,
                     telegram_id,
                     loja_nome,
-                    loja_bot_link: bot_username ? `https://t.me/${bot_username}?start=frota_${pacoteId}` : null,
-                    pedidos_resumo,
-                    taxa_total: taxa_desl,
-                    distancia_km: distancia_km || 0,
-                    taxa_deslocamento_brl: taxa_desl,
+                    pedidos: pedidos || [],
                     taxa_entrega,
-                    valor_total,
-                    pacote_id: pacoteId || '',
-                    no_url,
-                    no_nome: no_nome || loja_nome
-                }),
-                signal: AbortSignal.timeout(8000)
+                    taxa_deslocamento: taxa_desl,
+                })
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                return reply.code(502).send({ error: err.error || 'N\u00f3 parceiro rejeitou o convite.' });
-            }
-            await broadcastLog('FROTA_COMPARTILHADA', `Convite enviado para motoboy ${telegram_id} via n\u00f3 ${no_url}`);
-            return reply.send({ ok: true });
-        } catch (e) {
-            return reply.code(502).send({ error: 'N\u00e3o foi poss\u00edvel contactar o n\u00f3 parceiro.' });
+            await broadcastLog('FROTA_COMPARTILHADA', `Convite enviado via Hub para motoboy ${telegram_id}`);
+            return reply.send({ ok: true, pacote_id: pacoteId });
+        } catch (e: any) {
+            return reply.code(502).send({ error: e.message || 'Falha ao registrar rota no Hub.' });
         }
     });
 
-    app.post('/api/frota-compartilhada/repassar-convite', async (request: any, reply) => {
-        const { telegram_id, loja_nome, loja_bot_link, pedidos_resumo, taxa_total, distancia_km, taxa_deslocamento_brl, taxa_entrega, valor_total, pacote_id, no_url: motoboy_no_url, no_nome: motoboy_no_nome } = request.body || {};
-        if (!telegram_id || !loja_nome) return reply.code(400).send({ error: 'Dados insuficientes.' });
-
-        const motoboy = await getMotoboyByTelegramId(telegram_id);
-        if (!motoboy) return reply.code(404).send({ error: 'Motoboy n\u00e3o encontrado neste n\u00f3.' });
-
-        await upsertFleet({
-            telegram_id,
-            no_url: motoboy_no_url || null,
-            no_nome: motoboy_no_nome || loja_nome,
-            taxa_deslocamento: Number(taxa_deslocamento_brl || taxa_total || 0),
-            distancia_km: Number(distancia_km || 0)
-        });
-
-        if (pacote_id) {
-            const pacotesRaw = await getPacotes();
-            const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
-            const pacote = pacotes.find((p: any) => p.id === pacote_id);
-            if (pacote) {
-                pacote.taxa_deslocamento = Number(taxa_deslocamento_brl || taxa_total || 0);
-                pacote.deslocamento_pago = false;
-                await savePacote(pacote);
-            }
+    app.get('/api/frota-compartilhada/status-convite', async (request: any, reply) => {
+        const { pacote_id } = request.query || {};
+        if (!pacote_id) return reply.code(400).send({ error: 'pacote_id \u00e9 obrigat\u00f3rio.' });
+        try {
+            const { data } = await hubFetch(`/rota/status?pacote_id=${encodeURIComponent(pacote_id)}`);
+            return reply.send(data);
+        } catch (e: any) {
+            return reply.code(502).send({ error: e.message || 'Falha ao consultar status no Hub.' });
         }
-
-        await repassarConviteNuvem(telegram_id, {
-            loja_destino_nome: loja_nome,
-            link_bot_destino: loja_bot_link || '',
-            taxa_estimada: Number(taxa_total || 0),
-            distancia_km: Number(distancia_km || 0),
-            taxa_deslocamento_brl: Number(taxa_deslocamento_brl || taxa_total || 0),
-            taxa_entrega: Number(taxa_entrega || 0),
-            valor_total: Number(valor_total || 0),
-            pacote_id: pacote_id || ''
-        });
-
-        await broadcastLog('FROTA_COMPARTILHADA', `Convite de ${loja_nome} repassado para ${motoboy.nome}.`);
-        return reply.send({ ok: true });
     });
 
     app.register(async (instance) => {
@@ -1002,18 +966,11 @@ async function aceitar(){
             if (!noUrl || online.length === 0) return;
 
             for (const m of online) {
-                fetch(`${HUB_URL}/sync`, {
+                hubFetch('/sync', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, lat: m.lat, lng: m.lng, no_url: noUrl, no_nome: config?.nome || 'Loja Parceira' }),
-                    signal: AbortSignal.timeout(5000)
-                }).then(async (res) => {
-                    if (!res.ok) {
-                        const errText = await res.text();
-                        console.error(`[HUB SYNC] ERRO ${res.status} da HostGator:`, errText);
-                    } else {
-                        console.log(`[HUB SYNC] Sucesso! ${m.nome} atualizado na Nuvem.`);
-                    }
+                }).then(() => {
+                    console.log(`[HUB SYNC] Sucesso! ${m.nome} atualizado na Nuvem.`);
                 }).catch(e => console.error('[HUB SYNC] Falha de rede:', e.message));
             }
         } catch (e) {
