@@ -684,6 +684,7 @@
 
         let telegramIdSOSAtual = null;
         let jidSACAtual = null;
+        let nomeSACAtual = null;
 
         // Gera beep via Web Audio API — sem dependência externa, sem bloqueio de CSP
         function playBeep(repeticoes = 1) {
@@ -726,8 +727,13 @@
         function abrirModalSAC() {
             document.getElementById('sac-banner').style.display = 'none';
             if (jidSACAtual) {
-                fetch('/api/sac/iniciar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jid: jidSACAtual }) }).catch(() => {});
+                fetch('/api/sac/iniciar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid: jidSACAtual, nome: nomeSACAtual })
+                }).catch(() => {});
             }
+            document.querySelector('#modal-chat-sac h3').textContent = `📞 ${nomeSACAtual || 'Atendimento ao Cliente'}`;
             document.getElementById('modal-chat-sac').style.display = 'flex';
         }
 
@@ -1624,6 +1630,7 @@
                     }
                     else if (log.tipo === 'SAC_REQUEST') {
                         jidSACAtual = log.jid;
+                        nomeSACAtual = log.nome || 'Cliente';
                         document.getElementById('sac-text').innerText = log.mensagem;
                         document.getElementById('sac-banner').style.display = 'block';
                         playBeep(1);

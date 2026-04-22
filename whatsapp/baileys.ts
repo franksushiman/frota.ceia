@@ -330,7 +330,29 @@ export class BaileysProvider implements WhatsAppProvider {
                 if (resultado.transferir) {
                     session.mode = 'HUMAN';
                     this.sacAtivos.add(jidNormalized);
-                    broadcastLog('SAC_REQUEST', `Cliente [${msg.pushName || numeroNormalizado}] pediu para falar com um atendente.`, { jid: jidNormalized, nome: msg.pushName || numeroNormalizado });
+
+                    let nomeExibicao = msg.pushName || numeroNormalizado;
+                    try {
+                        const pedidosRaw = await getPedidos();
+                        if (pedidosRaw?.length) {
+                            const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+                            const ultimos6 = numeroNormalizado.slice(-6);
+                            const pedidosDoCliente = pedidos.filter((p: any) => {
+                                const tel = (p.telefone || p.telefoneCliente || p.whatsapp || p.telefone_cliente || '').replace(/\D/g, '');
+                                return tel.length >= 6 && tel.slice(-6) === ultimos6;
+                            });
+                            if (pedidosDoCliente.length > 0) {
+                                const pedidoMaisRecente = pedidosDoCliente.sort((a: any, b: any) =>
+                                    String(b.id ?? '').localeCompare(String(a.id ?? ''))
+                                )[0];
+                                const nomePedido = pedidoMaisRecente.nomeCliente || pedidoMaisRecente.nome_cliente;
+                                if (nomePedido) nomeExibicao = nomePedido;
+                            }
+                        }
+                    } catch (_) {}
+
+                    this.sacNomes.set(jidNormalized, nomeExibicao);
+                    broadcastLog('SAC_REQUEST', `Cliente [${nomeExibicao}] pediu para falar com um atendente.`, { jid: jidNormalized, nome: nomeExibicao });
                     await this.sendMessage(numeroCliente, 'Um de nossos atendentes já vai falar com você. Aguarde um instante.', 'SISTEMA', 'transfere_humano', 'BOT');
                     return;
                 }
