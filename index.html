@@ -149,6 +149,9 @@
                     <input type="password" id="login-senha" class="form-control" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin(this)">
                 </div>
                 <button class="btn" onclick="doLogin(this)">Entrar</button>
+                <div style="text-align:center; margin-top:12px;">
+                    <a onclick="abrirRecuperacao()" style="font-size:0.82rem; color:#64748b; cursor:pointer; text-decoration:underline;">Esqueci a senha</a>
+                </div>
             </div>
 
             <div id="screen-setup" class="login-screen">
@@ -167,6 +170,60 @@
                 </div>
                 <button class="btn" onclick="doSetup(this)">Criar conta e entrar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL SETUP CÓDIGO DE RECUPERAÇÃO (bloqueante) -->
+    <div id="modal-setup-codigo-recuperacao" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999998; justify-content:center; align-items:center;">
+        <div style="background:white; border-radius:16px; padding:36px; width:480px; max-width:94vw; box-shadow:0 25px 50px rgba(0,0,0,0.4);">
+            <h3 id="titulo-setup-codigo" style="margin:0 0 8px; font-size:1.2rem;">🔐 Configure seu Código de Recuperação</h3>
+            <p style="color:#64748b; font-size:0.87rem; margin:0 0 20px;">Esta é a única forma de recuperar o acesso se você esquecer a senha. Guarde em local seguro — não será exibido novamente.</p>
+            <div id="setup-codigo-form">
+                <div class="form-group"><label>Senha atual (revalidação)</label><input type="password" id="setup-codigo-senha" class="form-control" placeholder="••••••••"></div>
+                <button class="btn" onclick="gerarCodigoRecuperacao(this)">Gerar Código</button>
+            </div>
+            <div id="setup-codigo-resultado" style="display:none;">
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:20px; margin-bottom:16px; text-align:center;">
+                    <div style="font-size:0.78rem; color:#64748b; margin-bottom:6px;">Seu código de recuperação:</div>
+                    <div id="codigo-gerado-display" style="font-family:monospace; font-size:1.4rem; font-weight:700; letter-spacing:2px; color:#0f172a; word-break:break-all;"></div>
+                </div>
+                <div style="display:flex; gap:10px; margin-bottom:16px;">
+                    <button class="btn" style="flex:1; background:#0ea5e9;" onclick="copiarCodigoGerado()">📋 Copiar código</button>
+                    <button class="btn" style="flex:1; background:#6366f1;" onclick="imprimirCodigoGerado()">🖨️ Imprimir</button>
+                </div>
+                <label style="display:flex; align-items:center; gap:10px; font-size:0.85rem; color:#374151; cursor:pointer; margin-bottom:16px;">
+                    <input type="checkbox" id="checkbox-codigo-guardado" onchange="document.getElementById('btn-concluir-codigo').disabled = !this.checked">
+                    Confirmo que guardei o código em local seguro e entendo que não poderei recuperá-lo novamente.
+                </label>
+                <button id="btn-concluir-codigo" class="btn" disabled onclick="concluirSetupCodigo()">Concluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL RECUPERAR SENHA -->
+    <div id="modal-recuperar-senha" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999997; justify-content:center; align-items:center;">
+        <div style="background:white; border-radius:16px; padding:36px; width:460px; max-width:94vw; box-shadow:0 25px 50px rgba(0,0,0,0.4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:1.1rem;">🔑 Recuperar Senha</h3>
+                <button onclick="fecharRecuperacao()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:#64748b;">✕</button>
+            </div>
+            <div class="form-group"><label>WhatsApp</label><input type="text" id="rec-whatsapp" class="form-control" placeholder="5511999990000" inputmode="tel"></div>
+            <div class="form-group"><label>Código de recuperação</label><input type="text" id="rec-codigo" class="form-control" placeholder="CEIA-XXXX-XXXX-XXXX" oninput="this.value=this.value.toUpperCase()"></div>
+            <div class="form-group"><label>Nova senha</label><input type="password" id="rec-nova-senha" class="form-control" placeholder="Mínimo 6 caracteres (recomendamos 8+)"></div>
+            <div class="form-group"><label>Confirmar nova senha</label><input type="password" id="rec-nova-senha-confirm" class="form-control"></div>
+            <button class="btn" onclick="enviarRecuperacaoSenha(this)">Redefinir Senha</button>
+            <div style="text-align:center; margin-top:14px;">
+                <a onclick="mostrarAvisoPerdaTudo()" style="font-size:0.8rem; color:#94a3b8; cursor:pointer; text-decoration:underline;">Perdi a senha e o código</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL AVISO PERDA TOTAL -->
+    <div id="modal-aviso-perda-total" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999996; justify-content:center; align-items:center;">
+        <div style="background:white; border-radius:16px; padding:32px; width:460px; max-width:94vw;">
+            <h3 style="margin:0 0 12px; color:#dc2626;">⚠️ Acesso não recuperável</h3>
+            <p style="color:#374151; font-size:0.9rem; line-height:1.5; margin-bottom:20px;">Sem o código de recuperação, não há como restaurar o acesso a esta conta. A única saída é apagar o banco de dados local e recadastrar o estabelecimento do zero. Entre em contato com o suporte se precisar de orientação.</p>
+            <button class="btn" onclick="document.getElementById('modal-aviso-perda-total').style.display='none'">Entendi</button>
         </div>
     </div>
 
@@ -337,6 +394,12 @@
                 <div class="form-group"><label>Nova Senha</label><input type="password" id="senha-nova" class="form-control" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
                 <div class="form-group"><label>Confirmar Nova Senha</label><input type="password" id="senha-nova-confirm" class="form-control" autocomplete="new-password"></div>
                 <button class="btn" onclick="alterarSenha(this)">Alterar Senha</button>
+            </div>
+
+            <div class="card" style="margin-top:16px;">
+                <h3 style="margin-top:0; font-size:1.1rem; color:var(--text-dark);">Código de Recuperação</h3>
+                <p style="font-size:0.87rem; color:#64748b; margin-bottom:16px;">Se você acha que alguém pode ter acesso ao seu código atual, gere um novo. O antigo deixará de funcionar imediatamente.</p>
+                <button class="btn" onclick="abrirGerarNovoCodigo()">Gerar Novo Código</button>
             </div>
         </div>
     </div>
@@ -611,12 +674,107 @@
                 });
                 const data = await res.json();
                 if (!res.ok) return showLoginError(data.error || 'Credenciais inválidas.');
-                hideOverlay();
-                initApp();
+                const statusCodigo = await fetch('/api/auth/codigo-recuperacao/status');
+                if (!statusCodigo.ok) {
+                    showLoginError('Erro ao verificar configurações da conta. Tente novamente.');
+                    return;
+                }
+                const statusData = await statusCodigo.json();
+                if (!statusData.tem_codigo) {
+                    document.getElementById('titulo-setup-codigo').textContent = '🔐 Configure seu Código de Recuperação';
+                    document.getElementById('setup-codigo-form').style.display = 'block';
+                    document.getElementById('setup-codigo-resultado').style.display = 'none';
+                    document.getElementById('setup-codigo-senha').value = '';
+                    document.getElementById('checkbox-codigo-guardado').checked = false;
+                    document.getElementById('btn-concluir-codigo').disabled = true;
+                    document.getElementById('modal-setup-codigo-recuperacao').style.display = 'flex';
+                } else {
+                    hideOverlay();
+                    initApp();
+                }
             } catch(e) {
                 showLoginError('Falha de conexão. Verifique se o servidor está rodando.');
             } finally {
                 btn.disabled = false; btn.textContent = 'Entrar';
+            }
+        }
+
+        function abrirRecuperacao() {
+            document.getElementById('modal-recuperar-senha').style.display = 'flex';
+        }
+        function fecharRecuperacao() {
+            document.getElementById('modal-recuperar-senha').style.display = 'none';
+        }
+        function mostrarAvisoPerdaTudo() {
+            document.getElementById('modal-aviso-perda-total').style.display = 'flex';
+        }
+        function abrirGerarNovoCodigo() {
+            document.getElementById('titulo-setup-codigo').textContent = '🔑 Gerar Novo Código';
+            document.getElementById('setup-codigo-form').style.display = 'block';
+            document.getElementById('setup-codigo-resultado').style.display = 'none';
+            document.getElementById('setup-codigo-senha').value = '';
+            document.getElementById('checkbox-codigo-guardado').checked = false;
+            document.getElementById('btn-concluir-codigo').disabled = true;
+            document.getElementById('modal-setup-codigo-recuperacao').style.display = 'flex';
+        }
+        async function gerarCodigoRecuperacao(btn) {
+            const senha = document.getElementById('setup-codigo-senha').value;
+            if (!senha) return showToast('Digite sua senha atual.', 'error');
+            btn.disabled = true; btn.textContent = 'Gerando...';
+            try {
+                const res = await fetch('/api/auth/codigo-recuperacao/gerar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ senha_atual: senha })
+                });
+                const data = await res.json();
+                if (!res.ok) return showToast(data.error || 'Erro ao gerar código.', 'error');
+                document.getElementById('codigo-gerado-display').textContent = data.codigo;
+                document.getElementById('setup-codigo-form').style.display = 'none';
+                document.getElementById('setup-codigo-resultado').style.display = 'block';
+            } catch(e) {
+                showToast('Falha de conexão.', 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Gerar Código';
+            }
+        }
+        function copiarCodigoGerado() {
+            const codigo = document.getElementById('codigo-gerado-display').textContent;
+            navigator.clipboard.writeText(codigo).then(() => showToast('Código copiado!', 'success'));
+        }
+        function imprimirCodigoGerado() {
+            const codigo = document.getElementById('codigo-gerado-display').textContent;
+            const w = window.open('', '_blank');
+            w.document.write(`<html><body style="font-family:monospace; text-align:center; padding:60px;"><h2>Código de Recuperação — frota.ceia</h2><p style="font-size:2rem; letter-spacing:4px; font-weight:bold;">${codigo}</p><p style="color:#888; font-size:0.9rem;">Guarde em local seguro. Este código garante acesso ao painel em caso de perda de senha.</p></body></html>`);
+            w.print();
+        }
+        function concluirSetupCodigo() {
+            document.getElementById('modal-setup-codigo-recuperacao').style.display = 'none';
+            hideOverlay();
+            initApp();
+        }
+        async function enviarRecuperacaoSenha(btn) {
+            const whatsapp = document.getElementById('rec-whatsapp').value.trim();
+            const codigo = document.getElementById('rec-codigo').value.trim();
+            const nova_senha = document.getElementById('rec-nova-senha').value;
+            const confirma = document.getElementById('rec-nova-senha-confirm').value;
+            if (!whatsapp || !codigo || !nova_senha) return showToast('Preencha todos os campos.', 'error');
+            if (nova_senha !== confirma) return showToast('As senhas não coincidem.', 'error');
+            btn.disabled = true; btn.textContent = 'Redefinindo...';
+            try {
+                const res = await fetch('/api/auth/recuperar-senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp, codigo, nova_senha })
+                });
+                const data = await res.json();
+                if (!res.ok) return showToast(data.error || 'Código inválido.', 'error');
+                showToast('Senha redefinida com sucesso! Faça login.', 'success');
+                fecharRecuperacao();
+            } catch(e) {
+                showToast('Falha de conexão.', 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Redefinir Senha';
             }
         }
 

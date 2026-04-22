@@ -116,6 +116,7 @@ export async function initDatabase(): Promise<Database> {
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN meta_phone_number_id TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN documento TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN whatsapp_ativo INTEGER DEFAULT 1;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE usuarios ADD COLUMN codigo_recuperacao_hash TEXT;'); } catch (e) {}
 
         await database.exec('CREATE TABLE IF NOT EXISTS tokens_cadastro (token TEXT PRIMARY KEY, usado INTEGER DEFAULT 0, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP)');
 
@@ -439,6 +440,17 @@ export async function getUsuarioPorTelegramId(telegram_id: string): Promise<any>
 export async function atualizarSenhaUsuario(id: number, senha_hash: string): Promise<void> {
     const database = await initDatabase();
     await database.run('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [senha_hash, id]);
+}
+
+export async function atualizarCodigoRecuperacao(whatsapp: string, hash: string): Promise<void> {
+    const database = await initDatabase();
+    await database.run('UPDATE usuarios SET codigo_recuperacao_hash = ? WHERE whatsapp = ?', [hash, whatsapp]);
+}
+
+export async function getCodigoRecuperacaoHash(whatsapp: string): Promise<string | null> {
+    const database = await initDatabase();
+    const row = await database.get('SELECT codigo_recuperacao_hash FROM usuarios WHERE whatsapp = ?', [whatsapp]);
+    return row?.codigo_recuperacao_hash ?? null;
 }
 
 export async function vincularTelegramUsuario(whatsapp: string, telegram_id: string): Promise<boolean> {

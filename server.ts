@@ -12,12 +12,27 @@ import QRCode from 'qrcode';
 // \u2500\u2500 Tokens de despacho presencial \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // token UUID \u2192 {pacoteId, motoboy, expiresAt}. Sem persist\u00eancia \u2014 reinicia com o servidor.
 const dispatchTokens = new Map<string, { pacoteId: string; motoboy: any; expiresAt: number }>();
+
+const HASH_PLACEHOLDER: string = bcrypt.hashSync('placeholder-ceia-never-matches', 12);
+
+function gerarCodigoRecuperacao(): string {
+    const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.randomBytes(12);
+    const grupos: string[] = [];
+    for (let g = 0; g < 3; g++) {
+        let grupo = '';
+        for (let i = 0; i < 4; i++) grupo += alfabeto[bytes[g * 4 + i] % alfabeto.length];
+        grupos.push(grupo);
+    }
+    return `CEIA-${grupos[0]}-${grupos[1]}-${grupos[2]}`;
+}
+
 setInterval(() => {
     const now = Date.now();
     for (const [t, d] of dispatchTokens) if (d.expiresAt < now) dispatchTokens.delete(t);
 }, 5 * 60 * 1000);
 
-import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
+import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
 import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
@@ -126,6 +141,60 @@ export async function startServer() {
         if (!valido) return reply.code(401).send({ error: 'Senha atual incorreta.' });
 
         await atualizarSenhaUsuario(usuario.id, await bcrypt.hash(nova_senha, 12));
+        return reply.send({ ok: true });
+    });
+
+    app.get('/api/auth/codigo-recuperacao/status', async (request: any, reply) => {
+        try {
+            const secret = await getJwtSecret();
+            const payload = jwt.verify(request.cookies?.ceia_token, secret) as { whatsapp: string };
+            const hash = await getCodigoRecuperacaoHash(payload.whatsapp);
+            return reply.send({ tem_codigo: !!hash });
+        } catch {
+            return reply.code(401).send({ error: 'N\u00e3o autenticado.' });
+        }
+    });
+
+    app.post('/api/auth/codigo-recuperacao/gerar', async (request: any, reply) => {
+        try {
+            const secret = await getJwtSecret();
+            const payload = jwt.verify(request.cookies?.ceia_token, secret) as { whatsapp: string };
+            const { senha_atual } = request.body || {};
+            if (!senha_atual) return reply.code(400).send({ error: 'Senha atual \u00e9 obrigat\u00f3ria.' });
+
+            const usuario = await getUsuarioPorWhatsapp(payload.whatsapp);
+            const valido = await bcrypt.compare(senha_atual, usuario.senha_hash);
+            if (!valido) return reply.code(401).send({ error: 'Senha incorreta.' });
+
+            const codigo = gerarCodigoRecuperacao();
+            const codigoSemHifens = codigo.replace(/-/g, '');
+            const hash = await bcrypt.hash(codigoSemHifens, 12);
+            await atualizarCodigoRecuperacao(payload.whatsapp, hash);
+            broadcastLog('SEGURANCA', `Novo código de recuperação gerado para ${payload.whatsapp}.`);
+            return reply.send({ codigo });
+        } catch {
+            return reply.code(401).send({ error: 'N\u00e3o autenticado.' });
+        }
+    });
+
+    app.post('/api/auth/recuperar-senha', async (request: any, reply) => {
+        const { whatsapp, codigo, nova_senha } = request.body || {};
+        if (!whatsapp || !codigo || !nova_senha) return reply.code(400).send({ error: 'Preencha todos os campos.' });
+        if (nova_senha.length < 6) return reply.code(400).send({ error: 'A nova senha deve ter no m\u00ednimo 6 caracteres.' });
+
+        const usuario = await getUsuarioPorWhatsapp(whatsapp);
+        const hashArmazenado = usuario ? await getCodigoRecuperacaoHash(whatsapp) : null;
+        const hashParaComparar = hashArmazenado || HASH_PLACEHOLDER;
+        const codigoNormalizado = codigo.toUpperCase().trim().replace(/-/g, '');
+
+        const valido = await bcrypt.compare(codigoNormalizado, hashParaComparar);
+
+        if (!usuario || !hashArmazenado || !valido) {
+            return reply.code(401).send({ error: 'C\u00f3digo inv\u00e1lido.' });
+        }
+
+        await atualizarSenhaUsuario(usuario.id, await bcrypt.hash(nova_senha, 12));
+        broadcastLog('SEGURANCA', `Senha redefinida via código de recuperação para ${whatsapp}.`);
         return reply.send({ ok: true });
     });
 
