@@ -858,20 +858,6 @@ async function aceitar(){
                     await savePacote(pacote);
                 }
             }
-
-            const enviado = await repassarConviteNuvem(telegram_id, {
-                loja_destino_nome: loja_nome,
-                link_bot_destino: '',
-                taxa_estimada: taxa_desl,
-                distancia_km: distancia_km || 0,
-                taxa_deslocamento_brl: taxa_desl,
-                taxa_entrega,
-                valor_total,
-                pacote_id: pacoteId || ''
-            });
-            if (!enviado) return reply.code(502).send({ error: 'Falha ao enviar convite via bot local.' });
-            await broadcastLog('FROTA_COMPARTILHADA', `Convite Global enviado diretamente para motoboy ${telegram_id} via bot local`);
-            return reply.send({ ok: true });
         }
 
         try {
