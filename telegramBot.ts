@@ -558,6 +558,37 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                     await upsertFleet({ telegram_id: chatId.toString(), latitude, longitude, status: 'ONLINE' });
                     broadcastLog('FROTA', `Motoboy [${motoboy?.nome?.split(' ')[0] || 'Parceiro'}] bateu o ponto e est\u00e1 ONLINE \ud83d\udfe2`);
                     await ctx.reply('\ud83d\udfe2 Ponto registrado! Voc\u00ea est\u00e1 ONLINE no radar da loja.\n\nFique atento \u00e0s novas rotas. (Para sair, pare de compartilhar a localiza\u00e7\u00e3o ou digite /offline)', defaultKeyboard);
+
+                    if (motoboy?.vinculo === 'Freelancer') {
+                        const config2 = await getConfiguracoes();
+                        const agora2 = new Date();
+                        const diasSemana2 = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+                        const diaKey2 = diasSemana2[agora2.getDay()];
+                        const horaAtual2 = agora2.getHours() * 60 + agora2.getMinutes();
+                        let dentroDoExpediente2 = false;
+                        if (config2?.horarios) {
+                            const dia2 = config2.horarios[diaKey2];
+                            if (dia2?.ativo && dia2.abre && dia2.fecha) {
+                                const [ah2, am2] = dia2.abre.split(':').map(Number);
+                                const [fh2, fm2] = dia2.fecha.split(':').map(Number);
+                                const abre2 = ah2 * 60 + am2;
+                                const fecha2 = fh2 * 60 + fm2;
+                                if (abre2 <= fecha2) {
+                                    dentroDoExpediente2 = horaAtual2 >= abre2 && horaAtual2 < fecha2;
+                                } else {
+                                    dentroDoExpediente2 = horaAtual2 >= abre2 || horaAtual2 < fecha2;
+                                }
+                            }
+                        }
+                        if (!dentroDoExpediente2) {
+                            const botGlobal = process.env.BOT_GLOBAL_USERNAME || 'Mula_Logistica_Bot';
+                            const linkGlobal = `https://t.me/${botGlobal}?start=${chatId}`;
+                            await ctx.reply(
+                                `\ud83c\udf19 A loja est\u00e1 fora do expediente agora, mas voc\u00ea pode continuar ativo na Frota Global e receber corridas de outras lojas da rede CEIA.\n\nClique aqui para ativar: ${linkGlobal}\n\nUse o mesmo app do Telegram \u2014 \u00e9 s\u00f3 confirmar e compartilhar sua localiza\u00e7\u00e3o l\u00e1 tamb\u00e9m.`,
+                                { disable_web_page_preview: true }
+                            );
+                        }
+                    }
                 } else {
                     await ctx.reply('\u26a0\ufe0f Aten\u00e7\u00e3o: voc\u00ea enviou uma localiza\u00e7\u00e3o fixa. Voc\u00ea precisa compartilhar a **Localiza\u00e7\u00e3o em Tempo Real**.');
                 }
