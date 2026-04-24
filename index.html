@@ -2449,12 +2449,70 @@
                     body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, no_nome: m.no_nome, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km })
                 });
                 if (!res.ok) { const d = await res.json(); return showToast(d.error || 'Erro ao convidar.', 'error'); }
+
+                const pac = pacotes.find(p => p.id === pacoteId);
+                if (pac) {
+                    pac.status = 'PENDENTE_ACEITE';
+                    pac.motoboy = { telegram_id: m.telegram_id, nome: m.nome };
+                    await salvarKanbanStorage();
+                    renderizarKanban();
+                }
                 fecharModal('modal-despacho');
-                showToast(`Convite enviado para ${m.nome}!`, 'success');
-                carregarFrota();
+                showToast(`Convite enviado para ${m.nome}! Aguardando resposta...`, 'success');
+                iniciarPollingNuvem(pacoteId, m.nome);
             } catch(e) {
                 showToast('Falha de conexão.', 'error');
             }
+        }
+
+        const _pollingNuvemTimers = {};
+        function iniciarPollingNuvem(pacoteId, nomeConvidado) {
+            if (_pollingNuvemTimers[pacoteId]) clearInterval(_pollingNuvemTimers[pacoteId]);
+            const MAX_MS = 5 * 60 * 1000;
+            const inicio = Date.now();
+            _pollingNuvemTimers[pacoteId] = setInterval(async () => {
+                if (Date.now() - inicio > MAX_MS) {
+                    clearInterval(_pollingNuvemTimers[pacoteId]);
+                    delete _pollingNuvemTimers[pacoteId];
+                    showToast(`Tempo esgotado aguardando ${nomeConvidado}.`, 'error');
+                    const pac = pacotes.find(p => p.id === pacoteId);
+                    if (pac && pac.status === 'PENDENTE_ACEITE') {
+                        pac.status = 'AGUARDANDO';
+                        pac.motoboy = null;
+                        await salvarKanbanStorage();
+                        renderizarKanban();
+                    }
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/frota-compartilhada/status-convite?pacote_id=${encodeURIComponent(pacoteId)}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.status === 'ACEITO') {
+                        clearInterval(_pollingNuvemTimers[pacoteId]);
+                        delete _pollingNuvemTimers[pacoteId];
+                        const pac = pacotes.find(p => p.id === pacoteId);
+                        if (pac) {
+                            pac.status = 'EM_ROTA';
+                            pac.motoboy = { telegram_id: data.telegram_id, nome: data.motoboy_nome || nomeConvidado };
+                            await salvarKanbanStorage();
+                            renderizarKanban();
+                        }
+                        showToast(`${data.motoboy_nome || nomeConvidado} aceitou a rota!`, 'success');
+                    } else if (data.status === 'RECUSADO') {
+                        clearInterval(_pollingNuvemTimers[pacoteId]);
+                        delete _pollingNuvemTimers[pacoteId];
+                        const pac = pacotes.find(p => p.id === pacoteId);
+                        if (pac) {
+                            pac.status = 'AGUARDANDO';
+                            pac.motoboy = null;
+                            await salvarKanbanStorage();
+                            renderizarKanban();
+                        }
+                        showToast(`${data.motoboy_nome || nomeConvidado} recusou a rota.`, 'error');
+                    }
+                } catch(e) { /* ignora falhas de rede */ }
+            }, 3000);
         }
 
         function abrirModalMotoboyNuvem(moto) {
