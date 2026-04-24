@@ -4,7 +4,7 @@ import { broadcastLog } from './logger';
 import { processarBaixaPeloTelegram, getRotasMotoboy } from './operacao';
 import { enviarMensagemWhatsApp, traduzirMotoboyParaCliente, clienteEmSAC } from './whatsapp/index';
 
-type Step = 'NOME' | 'WHATSAPP' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM';
+type Step = 'NOME' | 'WHATSAPP' | 'VINCULO' | 'PIX' | 'VEICULO' | 'CHAT_CLIENTE' | 'AGUARDANDO_GPS_NUVEM' | 'DUVIDA_IA';
 
 interface UserSession {
     step: Step | 'SOS_CHAT';
@@ -189,7 +189,7 @@ export async function iniciarTelegram() {
         };
 
         const defaultKeyboard = Markup.keyboard([
-            ['\ud83c\udd98 Pedir Ajuda (SOS)', '\ud83d\udcac Falar com Cliente']
+            ['\ud83c\udd98 Pedir Ajuda (SOS)', '\u2753 D\u00favidas']
         ]).resize();
 
         const checarCadastro = async (telegramId: string, ctx: any): Promise<boolean> => {
@@ -256,20 +256,10 @@ Vamos iniciar seu cadastro. Por favor, digite seu **Nome Completo**:`, Markup.re
             ]));
         });
 
-        bot.hears('\ud83d\udcac Falar com Cliente', async (ctx) => {
+        bot.hears('\u2753 D\u00favidas', async (ctx) => {
             if (!await checarCadastro(ctx.chat.id.toString(), ctx)) return;
-            const motoboyAtual = await getMotoboyByTelegramId(ctx.chat.id.toString());
-            if (motoboyAtual?.status === 'OFFLINE' || motoboyAtual?.status === 'CADASTRANDO') {
-                await ctx.reply('\u26a0\ufe0f Voc\u00ea precisa estar em expediente (ONLINE) para falar com o cliente.');
-                return;
-            }
-            const chatId = ctx.chat.id.toString();
-            const rotas = await getRotasMotoboy(chatId);
-            
-            if (rotas.length === 0) return ctx.reply('Voc\u00ea n\u00e3o tem nenhuma rota ativa no momento.');
-
-            const botoes = rotas.map(r => [Markup.button.callback(`Falar com ${r.pedido.nomeCliente.split(' ')[0]}`, `chat_${r.pedido.id}`)]);
-            await ctx.reply('Com qual cliente voc\u00ea precisa falar?', Markup.inlineKeyboard(botoes));
+            userSessions[ctx.chat.id] = { step: 'DUVIDA_IA', data: {} };
+            await ctx.reply('Qual \u00e9 sua d\u00favida? Pode digitar \u00e0 vontade. Ex: quanto \u00e9 a taxa de deslocamento? como compartilho localiza\u00e7\u00e3o? o que \u00e9 Frota Global?');
         });
 
         bot.action(/^chat_(.+)$/, async (ctx) => {
@@ -547,6 +537,16 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
 \ud83d\udcb0 *Taxa de Deslocamento Acordada:* R$ ${(pacote.taxa_deslocamento || 0).toFixed(2)} (Adicionada ao extrato na primeira entrega)`;
                             await ctx.reply(detalheMsg, { parse_mode: 'Markdown', disable_web_page_preview: true, ...defaultKeyboard });
                             delete userSessions[chatId];
+                            let pedidoIdx = 0;
+                            for (const pId of pacote.pedidosIds || []) {
+                                const p = pedidos.find((ped: any) => ped.id === pId);
+                                if (p) {
+                                    const primeiroNome = (p.cliente_nome || p.nomeCliente || 'Cliente').split(' ')[0];
+                                    await ctx.reply(`Pedido ${++pedidoIdx} \u2014 ${primeiroNome}`, Markup.inlineKeyboard([
+                                        Markup.button.callback(`\ud83d\udcac Falar com ${primeiroNome}`, `chat_${p.id}`)
+                                    ]));
+                                }
+                            }
                         } else {
                             await ctx.reply('\u26a0\ufe0f N\u00e3o foi poss\u00edvel encontrar os detalhes da sua rota. Entre em contato com a loja.');
                         }
@@ -696,6 +696,32 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                         }
                     } else {
                         await ctx.reply('❌ Erro: Cliente sem número de telefone para esta rota.');
+                    }
+                    return;
+                }
+
+                if (session?.step === 'DUVIDA_IA') {
+                    const motoboyDuvida = await getMotoboyByTelegramId(chatId.toString());
+                    try {
+                        const res = await fetch(`${process.env.HUB_URL}/wp-json/ceia/v1/ia/perguntar`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-Ceia-Node-Token': process.env.NODE_TOKEN || '' },
+                            body: JSON.stringify({
+                                pergunta: text,
+                                contexto_motoboy: `${motoboyDuvida?.nome || 'Motoboy'} / ${motoboyDuvida?.vinculo || 'Fixo'}`
+                            }),
+                            signal: AbortSignal.timeout(25000)
+                        });
+                        const data = await res.json() as any;
+                        delete userSessions[chatId];
+                        if (data.ok && data.resposta) {
+                            await ctx.reply(data.resposta, defaultKeyboard);
+                        } else {
+                            await ctx.reply('N\u00e3o consegui consultar agora. Tente de novo daqui a pouco.', defaultKeyboard);
+                        }
+                    } catch (_e) {
+                        delete userSessions[chatId];
+                        await ctx.reply('N\u00e3o consegui consultar agora. Tente de novo daqui a pouco.', defaultKeyboard);
                     }
                     return;
                 }
