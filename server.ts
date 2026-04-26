@@ -35,7 +35,7 @@ setInterval(() => {
 import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
 import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC, traduzirMotoboyParaCliente, isIgnorar } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
-import { initLogger, broadcastLog } from './logger';
+import { initLogger, broadcastLog, broadcastMessage } from './logger';
 
 
 const HUB_URL = process.env.HUB_URL;
@@ -890,6 +890,101 @@ async function aceitar(){
         }
     });
 
+    app.get('/api/frota-compartilhada/mensagens-pendentes', async (request: any, reply) => {
+        const { pacote_id } = request.query || {};
+        if (!pacote_id) return reply.code(400).send({ error: 'pacote_id \u00e9 obrigat\u00f3rio.' });
+
+        let hubData: any;
+        try {
+            const { data } = await hubFetch(`/rota/mensagens-pendentes?pacote_id=${encodeURIComponent(pacote_id)}`);
+            hubData = data;
+        } catch (e: any) {
+            return reply.code(502).send({ ok: false, error: e.message || 'Falha ao buscar mensagens no Hub.' });
+        }
+
+        const mensagens: any[] = hubData?.mensagens || [];
+        let processadas = 0;
+
+        for (const msg of mensagens) {
+            try {
+                if (msg.tipo === 'cliente') {
+                    const traduzido = await traduzirMotoboyParaCliente(msg.mensagem || '');
+                    if (!isIgnorar(traduzido)) {
+                        const num = String(msg.telefone_cliente || '').replace(/\D/g, '');
+                        if (num.length >= 10) {
+                            await enviarMensagemWhatsApp('55' + num, traduzido);
+                        }
+                    }
+
+                } else if (msg.tipo === 'sos_abriu') {
+                    await broadcastLog('SOS', '\ud83c\udd98 SOS aberto pelo motoboy ' + (msg.nome_motoboy || msg.telegram_id));
+
+                } else if (msg.tipo === 'sos') {
+                    await broadcastLog('SOS', msg.mensagem || 'SOS recebido via Nuvem.');
+
+                } else if (msg.tipo === 'baixa') {
+                    const [pacotesRaw, pedidosRaw] = await Promise.all([getPacotes(), getPedidos()]);
+                    const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+                    const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+
+                    const pacote = pacotes.find((p: any) => p.id === msg.pacote_id);
+                    if (!pacote) {
+                        hubFetch('/rota/baixa-resposta', {
+                            method: 'POST',
+                            body: JSON.stringify({ pacote_id: msg.pacote_id, telegram_id: msg.telegram_id, ok: false, error: 'Pacote n\u00e3o encontrado.' })
+                        }).catch((e: any) => broadcastLog('HUB', `Falha ao reportar baixa-resposta: ${e.message}`));
+                        processadas++;
+                        continue;
+                    }
+
+                    const todosPedidos = (pacote.pedidosIds || []).map((id: string) =>
+                        pedidos.find((p: any) => p.id === id) ||
+                        (pacote.pedidos_snapshot || []).find((p: any) => p.id === id)
+                    ).filter(Boolean);
+
+                    const pedido = todosPedidos.find((p: any) => p.codigo_entrega === msg.codigo);
+                    if (!pedido) {
+                        hubFetch('/rota/baixa-resposta', {
+                            method: 'POST',
+                            body: JSON.stringify({ pacote_id: msg.pacote_id, telegram_id: msg.telegram_id, ok: false, error: 'C\u00f3digo inv\u00e1lido.' })
+                        }).catch((e: any) => broadcastLog('HUB', `Falha ao reportar baixa-resposta: ${e.message}`));
+                        processadas++;
+                        continue;
+                    }
+
+                    await registrarEntrega(msg.telegram_id, pedido.taxa);
+                    await inserirHistoricoMotoboy(msg.telegram_id, 'ENTREGA', pedido.taxa || 0, `Entrega Nuvem para ${pedido.nomeCliente || 'Cliente'}`);
+
+                    pacote.pedidosIds = (pacote.pedidosIds || []).filter((id: string) => id !== pedido.id);
+                    if (pacote.pedidos_snapshot) {
+                        pacote.pedidos_snapshot = pacote.pedidos_snapshot.filter((p: any) => p.id !== pedido.id);
+                    }
+                    const pacoteConcluido = pacote.pedidosIds.length === 0;
+                    if (pacoteConcluido) {
+                        await deletePacote(pacote.id);
+                        await atualizarCamposMotoboy(msg.telegram_id, { status: 'ONLINE' });
+                    } else {
+                        await savePacote(pacote);
+                    }
+                    await deletePedido(pedido.id);
+                    await broadcastLog('FINANCEIRO', `Baixa Nuvem confirmada. Taxa de R$${(pedido.taxa || 0).toFixed(2)} faturada.`);
+                    broadcastMessage(JSON.stringify({ tipo: 'BAIXA_PEDIDO', mensagem: 'Baixa Nuvem', pedidoId: pedido.id, data: new Date().toISOString() }));
+
+                    hubFetch('/rota/baixa-resposta', {
+                        method: 'POST',
+                        body: JSON.stringify({ pacote_id: msg.pacote_id, telegram_id: msg.telegram_id, ok: true, taxa: pedido.taxa, pacote_concluido: pacoteConcluido })
+                    }).catch((e: any) => broadcastLog('HUB', `Falha ao reportar baixa-resposta ao Hub: ${e.message}`));
+                }
+                // tipo desconhecido: ignora silenciosamente
+                processadas++;
+            } catch (e: any) {
+                broadcastLog('ERRO', `Erro processando mensagem Nuvem tipo ${msg.tipo}: ${e.message}`).catch(() => {});
+            }
+        }
+
+        return reply.send({ ok: true, processadas });
+    });
+
     app.register(async (instance) => {
         instance.get('/ws/logs', { websocket: true }, (connection) => {
             connection.send(JSON.stringify({ tipo: 'SYSTEM', mensagem: 'Conectado ao terminal de Logs.', data: new Date().toISOString() }));
@@ -967,36 +1062,6 @@ async function aceitar(){
     app.get('/api/gerar-token-bot', async (_request, reply) => {
         const token = await gerarTokenCadastro();
         return reply.send({ token });
-    });
-
-    app.post('/api/frota-global/rotear-mensagem', async (request: any, reply) => {
-        const { tipo, mensagem, numero } = request.body || {};
-
-        if (tipo === 'cliente') {
-            if (!numero || !mensagem) return reply.code(400).send({ error: 'numero e mensagem são obrigatórios para tipo=cliente.' });
-            try {
-                const textoPronto = await traduzirMotoboyParaCliente(mensagem);
-                if (isIgnorar(textoPronto)) {
-                    return reply.send({ ok: true, ignorada: true });
-                }
-                const sucesso = await enviarMensagemWhatsApp('55' + String(numero).replace(/\D/g, ''), textoPronto);
-                return reply.send({ ok: !!sucesso });
-            } catch (e: any) {
-                return reply.code(500).send({ ok: false, error: e.message });
-            }
-        }
-
-        if (tipo === 'sos' || tipo === 'sos_abriu') {
-            broadcastLog('SOS', `[Frota Global] SOS recebido via Hub (tipo=${tipo}).`);
-            return reply.send({ ok: true });
-        }
-
-        if (tipo === 'baixa') {
-            broadcastLog('BAIXA', '[Frota Global] Baixa recebida via Hub.');
-            return reply.send({ ok: true });
-        }
-
-        return reply.code(400).send({ error: `tipo desconhecido: ${tipo}` });
     });
 
     setInterval(async () => {
