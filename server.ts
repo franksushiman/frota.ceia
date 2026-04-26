@@ -33,7 +33,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
-import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC } from './whatsapp/index';
+import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC, traduzirMotoboyParaCliente, isIgnorar } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog } from './logger';
 
@@ -967,6 +967,36 @@ async function aceitar(){
     app.get('/api/gerar-token-bot', async (_request, reply) => {
         const token = await gerarTokenCadastro();
         return reply.send({ token });
+    });
+
+    app.post('/api/frota-global/rotear-mensagem', async (request: any, reply) => {
+        const { tipo, mensagem, numero } = request.body || {};
+
+        if (tipo === 'cliente') {
+            if (!numero || !mensagem) return reply.code(400).send({ error: 'numero e mensagem são obrigatórios para tipo=cliente.' });
+            try {
+                const textoPronto = await traduzirMotoboyParaCliente(mensagem);
+                if (isIgnorar(textoPronto)) {
+                    return reply.send({ ok: true, ignorada: true });
+                }
+                const sucesso = await enviarMensagemWhatsApp('55' + String(numero).replace(/\D/g, ''), textoPronto);
+                return reply.send({ ok: !!sucesso });
+            } catch (e: any) {
+                return reply.code(500).send({ ok: false, error: e.message });
+            }
+        }
+
+        if (tipo === 'sos' || tipo === 'sos_abriu') {
+            broadcastLog('SOS', `[Frota Global] SOS recebido via Hub (tipo=${tipo}).`);
+            return reply.send({ ok: true });
+        }
+
+        if (tipo === 'baixa') {
+            broadcastLog('BAIXA', '[Frota Global] Baixa recebida via Hub.');
+            return reply.send({ ok: true });
+        }
+
+        return reply.code(400).send({ error: `tipo desconhecido: ${tipo}` });
     });
 
     setInterval(async () => {

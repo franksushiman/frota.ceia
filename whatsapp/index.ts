@@ -49,6 +49,10 @@ export async function enviarMensagemWhatsApp(
     return provider.sendMessage(numero, texto, telegramId, motoboyMessage, motoboyName);
 }
 
+export function isIgnorar(s: string): boolean {
+    return s.trim().toUpperCase().replace(/[^A-Z]/g, '') === 'IGNORAR';
+}
+
 export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promise<string> {
     try {
         const config = await getConfiguracoes();
@@ -56,7 +60,7 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
 
         const openai = new OpenAI({ apiKey: config.openai_key });
         const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4o-mini',
             messages: [
                 { role: 'system', content: 'Você é o filtro de comunicação da CEIA. Analise a mensagem do entregador. REGRAS: 1. Se a mensagem for apenas uma saudação (oi, olá, bom dia), uma confirmação vazia ou não contiver uma dúvida/problema real sobre a entrega, responda APENAS a palavra: IGNORAR. 2. Se a mensagem for uma dúvida ou aviso real (ex: portão fechado, endereço errado, campainha estragada), traduza para um aviso profissional ao cliente sem usar saudações ou assinaturas. 3. NUNCA invente que o entregador chegou se ele não disser explicitamente.' },
                 { role: 'user', content: mensagemMotoboy }
@@ -66,5 +70,36 @@ export async function traduzirMotoboyParaCliente(mensagemMotoboy: string): Promi
         return completion.choices[0].message?.content || 'Estamos processando uma atualização sobre sua entrega. Um momento, por favor.';
     } catch (error) {
         return 'O sistema identificou uma breve lentidão na sua entrega. O parceiro já está ciente.';
+    }
+}
+
+export async function traduzirClienteParaMotoboy(
+    mensagemCliente: string,
+    ultimaMsgMotoboy?: string
+): Promise<string> {
+    try {
+        const config = await getConfiguracoes();
+        if (!config.openai_key) throw new Error('OpenAI Key não configurada.');
+
+        const openai = new OpenAI({ apiKey: config.openai_key });
+        const userContent = ultimaMsgMotoboy?.trim()
+            ? `Pergunta do motoboy: "${ultimaMsgMotoboy}"\n\nResposta do cliente: "${mensagemCliente}"`
+            : mensagemCliente;
+
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'Você é o filtro de comunicação da CEIA. Analise a resposta do CLIENTE para o motoboy.\nREGRAS:\n1. Se a resposta for apenas saudação, agradecimento, "ok", "valeu", ou qualquer coisa sem informação útil pra entrega, responda APENAS a palavra: IGNORAR.\n2. Se a resposta trouxer informação concreta (apartamento, número, ponto de referência, troco, instrução de acesso, dúvida sobre prazo, problema), reescreva em UMA frase curta e objetiva pro motoboy ler. Sem saudações. Sem assinatura. Sem inventar nada.\n3. Se houver contexto (a última pergunta do motoboy), use pra interpretar a resposta. Não repita a pergunta na resposta.\nPortuguês do Brasil.'
+                },
+                { role: 'user', content: userContent }
+            ],
+            temperature: 0.3,
+            max_tokens: 120,
+        });
+        return completion.choices[0].message?.content || mensagemCliente;
+    } catch (_error) {
+        return mensagemCliente;
     }
 }

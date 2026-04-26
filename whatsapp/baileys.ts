@@ -10,6 +10,7 @@ import { getRotaPeloCliente } from '../operacao';
 import { broadcastLog } from '../logger';
 import { WhatsAppProvider, ProviderState } from './types';
 import { enviarMensagemTelegram, encerrarChatClientePeloPainel } from '../telegramBot';
+import { traduzirClienteParaMotoboy, isIgnorar } from './index';
 
 // Rastreia o último motoboy Nuvem que atendeu cada cliente (jid → telegram_id)
 const ultimoNuvemPorCliente = new Map<string, string>();
@@ -315,9 +316,18 @@ export class BaileysProvider implements WhatsAppProvider {
             // ROTEAMENTO 2: CHAT BLINDADO (Cache da Linha Direta)
             const achado = this.findContextBySuffix(jidNormalized);
             if (achado) {
-                const prefixo = isAudio ? '🎙️ Áudio do Cliente:\n' : '🗣️ Cliente: ';
-                await enviarMensagemTelegram(achado.ctx.telegramId, prefixo + mensagemTexto);
-                broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada via cache para ${achado.ctx.motoboyName}.`);
+                if (isAudio) {
+                    await enviarMensagemTelegram(achado.ctx.telegramId, '🎙️ Áudio do Cliente:\n' + mensagemTexto);
+                    broadcastLog('TELEGRAM', `Áudio de ${numeroNormalizado} roteado via cache para ${achado.ctx.motoboyName}.`);
+                } else {
+                    const filtrado = await traduzirClienteParaMotoboy(mensagemTexto, achado.ctx.lastMotoboyMessage);
+                    if (isIgnorar(filtrado)) {
+                        broadcastLog('TELEGRAM', 'Resposta do cliente filtrada como IGNORAR — não encaminhada.');
+                    } else {
+                        await enviarMensagemTelegram(achado.ctx.telegramId, '🗣️ Cliente: ' + filtrado);
+                        broadcastLog('TELEGRAM', `Resposta de ${numeroNormalizado} roteada via cache para ${achado.ctx.motoboyName}.`);
+                    }
+                }
                 return;
             }
 
