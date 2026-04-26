@@ -917,10 +917,18 @@ async function aceitar(){
                     }
 
                 } else if (msg.tipo === 'sos_abriu') {
-                    await broadcastLog('SOS', '\ud83c\udd98 SOS aberto pelo motoboy ' + (msg.nome_motoboy || msg.telegram_id));
+                    await broadcastLog(
+                        'SOS',
+                        `O motoboy ${msg.nome_motoboy || msg.telegram_id} acionou o ALARME DE EMERGÊNCIA!`,
+                        { telegram_id: String(msg.telegram_id) }
+                    );
 
-                } else if (msg.tipo === 'sos') {
-                    await broadcastLog('SOS', msg.mensagem || 'SOS recebido via Nuvem.');
+                } else if (msg.tipo === 'sos_msg' || msg.tipo === 'sos') {
+                    await broadcastLog(
+                        'SOS_MSG',
+                        String(msg.mensagem || ''),
+                        { telegram_id: String(msg.telegram_id) }
+                    );
 
                 } else if (msg.tipo === 'baixa') {
                     const [pacotesRaw, pedidosRaw] = await Promise.all([getPacotes(), getPedidos()]);
