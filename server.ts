@@ -89,6 +89,7 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 );
 
             } else if (msg.tipo === 'sos_encerrado') {
+                console.log('[NUVEM DRAIN] sos_encerrado recebido para telegram_id', msg.telegram_id);
                 await broadcastLog('SOS_ENCERRADO', '', { telegram_id: String(msg.telegram_id) });
 
             } else if (msg.tipo === 'baixa') {
@@ -629,39 +630,40 @@ async function aceitar(){
     app.post('/api/operacao/sos/reply', async (request: any, reply) => {
         const { telegram_id, texto } = request.body;
         if (!telegram_id) return reply.code(400).send({ error: 'telegram_id obrigatório.' });
-
-        const motoboy = await getMotoboyByTelegramId(telegram_id);
-        if (motoboy?.vinculo === 'Nuvem') {
-            try {
-                await hubFetch('/rota/sos-reply', {
-                    method: 'POST',
-                    body: JSON.stringify({ telegram_id, texto }),
-                });
-            } catch (e: any) {
-                return reply.code(502).send({ ok: false, error: e.message || 'Falha ao enviar via Hub.' });
-            }
-        } else {
+        let entregueViaHub = false;
+        try {
+            const { data } = await hubFetch('/rota/sos-reply', {
+                method: 'POST',
+                body: JSON.stringify({ telegram_id, texto }),
+            });
+            if (data?.ok) entregueViaHub = true;
+        } catch (e: any) {
+            console.error('[SOS REPLY] Hub falhou:', e?.message);
+        }
+        if (!entregueViaHub) {
             await enviarMensagemTelegram(telegram_id, texto);
         }
+        console.log('[SOS REPLY] entregue via', entregueViaHub ? 'Hub (Nuvem)' : 'bot da loja (Fixo/Free)');
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.post('/api/operacao/sos/encerrar', async (request: any, reply) => {
         const { telegram_id } = request.body;
         if (telegram_id) {
-            const motoboy = await getMotoboyByTelegramId(telegram_id);
-            if (motoboy?.vinculo === 'Nuvem') {
-                try {
-                    await hubFetch('/rota/sos-reply', {
-                        method: 'POST',
-                        body: JSON.stringify({ telegram_id, encerrar: true }),
-                    });
-                } catch (e: any) {
-                    console.error('[SOS] Falha ao encerrar via Hub:', e?.message);
-                }
-            } else {
+            let entregueViaHub = false;
+            try {
+                const { data } = await hubFetch('/rota/sos-reply', {
+                    method: 'POST',
+                    body: JSON.stringify({ telegram_id, encerrar: true }),
+                });
+                if (data?.ok) entregueViaHub = true;
+            } catch (e: any) {
+                console.error('[SOS ENCERRAR] Hub falhou:', e?.message);
+            }
+            if (!entregueViaHub) {
                 await enviarMensagemTelegram(telegram_id, '✅ Emergência encerrada pela base. Pode continuar operando normalmente.');
             }
+            console.log('[SOS ENCERRAR] entregue via', entregueViaHub ? 'Hub (Nuvem)' : 'bot da loja (Fixo/Free)');
         }
         await broadcastLog('SOS_ENCERRADO', '', { telegram_id: telegram_id || '' });
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
@@ -1122,7 +1124,10 @@ async function aceitar(){
                 try {
                     const { data } = await hubFetch(`/rota/mensagens-pendentes?pacote_id=${encodeURIComponent(pac.id)}`);
                     const msgs: any[] = data?.mensagens || [];
-                    if (msgs.length) await processarMensagensNuvem(msgs);
+                    if (msgs.length) {
+                        console.log('[NUVEM DRAIN] pacote', pac.id, 'tem', msgs.length, 'mensagens:', msgs.map((m: any) => m.tipo).join(','));
+                        await processarMensagensNuvem(msgs);
+                    }
                 } catch (_) { /* silencia erros pontuais por pacote */ }
             }
         } catch (e: any) {
