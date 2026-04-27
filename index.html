@@ -1776,11 +1776,22 @@
                         playBeep(3); // SOS — 3 bipes urgentes
                     }
                     else if (log.tipo === 'SOS_ENCERRADO') {
-                        telegramIdSOSAtual = null;
-                        document.getElementById('sos-banner').style.display = 'none';
-                        document.getElementById('chat-history-sos').innerHTML = '';
-                        document.querySelector('#modal-chat-sos h3').textContent = '🚨 Central de Apoio (SOS)';
-                        fecharModal('modal-chat-sos');
+                        // Só fecha modal/banner se for o mesmo motoboy do chat aberto.
+                        // Sem essa guarda, encerrar SOS de um motoboy desligava o chat de todos os outros.
+                        if (log.telegram_id && log.telegram_id === telegramIdSOSAtual) {
+                            telegramIdSOSAtual = null;
+                            document.getElementById('sos-banner').style.display = 'none';
+                            document.getElementById('chat-history-sos').innerHTML = '';
+                            document.querySelector('#modal-chat-sos h3').textContent = '🚨 Central de Apoio (SOS)';
+                            fecharModal('modal-chat-sos');
+                        } else if (!log.telegram_id) {
+                            // SOS_ENCERRADO sem telegram_id: comportamento legado, fecha tudo.
+                            telegramIdSOSAtual = null;
+                            document.getElementById('sos-banner').style.display = 'none';
+                            document.getElementById('chat-history-sos').innerHTML = '';
+                            document.querySelector('#modal-chat-sos h3').textContent = '🚨 Central de Apoio (SOS)';
+                            fecharModal('modal-chat-sos');
+                        }
                     }
                     else if (log.tipo === 'WHATSAPP') {
                         if (log.mensagem && log.mensagem.includes('operante')) atualizarBotaoWhatsApp('CONNECTED');

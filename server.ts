@@ -88,6 +88,9 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                     { telegram_id: String(msg.telegram_id) }
                 );
 
+            } else if (msg.tipo === 'sos_encerrado') {
+                await broadcastLog('SOS_ENCERRADO', '', { telegram_id: String(msg.telegram_id) });
+
             } else if (msg.tipo === 'baixa') {
                 const [pacotesRaw, pedidosRaw] = await Promise.all([getPacotes(), getPedidos()]);
                 const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
@@ -625,14 +628,40 @@ async function aceitar(){
 
     app.post('/api/operacao/sos/reply', async (request: any, reply) => {
         const { telegram_id, texto } = request.body;
-        await enviarMensagemTelegram(telegram_id, texto);
+        if (!telegram_id) return reply.code(400).send({ error: 'telegram_id obrigatório.' });
+
+        const motoboy = await getMotoboyByTelegramId(telegram_id);
+        if (motoboy?.vinculo === 'Nuvem') {
+            try {
+                await hubFetch('/rota/sos-reply', {
+                    method: 'POST',
+                    body: JSON.stringify({ telegram_id, texto }),
+                });
+            } catch (e: any) {
+                return reply.code(502).send({ ok: false, error: e.message || 'Falha ao enviar via Hub.' });
+            }
+        } else {
+            await enviarMensagemTelegram(telegram_id, texto);
+        }
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
     });
 
     app.post('/api/operacao/sos/encerrar', async (request: any, reply) => {
         const { telegram_id } = request.body;
         if (telegram_id) {
-            await enviarMensagemTelegram(telegram_id, '✅ Emergência encerrada pela base. Pode continuar operando normalmente.');
+            const motoboy = await getMotoboyByTelegramId(telegram_id);
+            if (motoboy?.vinculo === 'Nuvem') {
+                try {
+                    await hubFetch('/rota/sos-reply', {
+                        method: 'POST',
+                        body: JSON.stringify({ telegram_id, encerrar: true }),
+                    });
+                } catch (e: any) {
+                    console.error('[SOS] Falha ao encerrar via Hub:', e?.message);
+                }
+            } else {
+                await enviarMensagemTelegram(telegram_id, '✅ Emergência encerrada pela base. Pode continuar operando normalmente.');
+            }
         }
         await broadcastLog('SOS_ENCERRADO', '', { telegram_id: telegram_id || '' });
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true });
