@@ -1,6 +1,6 @@
 {
   "name": "fleet-management-backend",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "Backend para gestão de frota com suporte nativo a ESM",
   "main": "electron/main.cjs",
   "type": "module",
