@@ -710,7 +710,20 @@ async function aceitar(){
         await savePacote(pacote);
 
         if (pacote.motoboy?.telegram_id) {
-            await enviarMensagemTelegram(pacote.motoboy.telegram_id, '\u2705 *Coleta confirmada pela loja!* Os pacotes est\u00e3o com voc\u00ea. Boa rota!');
+            const isNuvem = pacote.motoboy?.vinculo === 'Nuvem' || pacote.motoboy?.no_url === 'GLOBAL';
+            if (isNuvem) {
+                try {
+                    await hubFetch('/rota/coleta-confirmada', {
+                        method: 'POST',
+                        body: JSON.stringify({ pacote_id: pacoteId })
+                    });
+                    console.log('[COLETAR] DETALHES disparados via Hub para motoboy Nuvem.');
+                } catch (e: any) {
+                    console.error('[COLETAR] Falha ao disparar DETALHES via Hub:', e?.message);
+                }
+            } else {
+                await enviarMensagemTelegram(pacote.motoboy.telegram_id, '\u2705 *Coleta confirmada pela loja!* Os pacotes est\u00e3o com voc\u00ea. Boa rota!');
+            }
         }
 
         const pedidosRaw = await getPedidos();
@@ -959,6 +972,7 @@ async function aceitar(){
 
         const config = await getConfiguracoes();
         const loja_nome = config?.nome || 'Loja Parceira';
+        const loja_endereco = config?.endereco || '';
 
         const taxa_entrega = (pedidos || []).reduce((acc: number, p: any) => acc + (p.taxa || 0), 0);
         const taxa_desl = taxa_deslocamento_brl || 0;
@@ -987,6 +1001,7 @@ async function aceitar(){
                     pacote_id: pacoteId,
                     telegram_id,
                     loja_nome,
+                    loja_endereco,
                     pedidos: pedidos || [],
                     taxa_entrega,
                     taxa_deslocamento: taxa_desl,
