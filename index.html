@@ -562,9 +562,6 @@
                 <div class="finance-row"><span>Deslocamento (Nuvem):</span> <strong id="fin-deslocamento">R$ 0,00</strong></div>
                 <div class="finance-total"><span>Total a Pagar:</span> <strong id="fin-total" style="color: #10b981;">R$ 0,00</strong></div>
             </div>
-            <div id="fin-whatsapp-row" style="display:none; margin-bottom:14px; font-size:0.9rem;">
-                📱 WhatsApp: <a id="fin-whatsapp-link" href="#" target="_blank" style="color:var(--accent); text-decoration:underline;"></a>
-            </div>
             <div id="pix-container" style="display: none; flex-direction: column; align-items: center; margin-bottom: 20px;"><canvas id="qr-code-pix"></canvas><p style="font-size: 0.8rem; color: var(--text-light); margin-top: 10px;">Chave: <b id="fin-chave-pix"></b></p></div>
             <div id="fin-empty-state" style="color: var(--text-light); margin-bottom: 20px; font-size: 0.9rem;">Nenhum valor pendente de pagamento.</div>
             <div style="display: flex; gap: 10px;"><button class="btn btn-edit" style="width: 50%;" onclick="fecharModal('modal-financeiro')">Fechar</button><button id="btn-zerar-acerto" class="btn btn-pay" style="width: 50%; display: none;" onclick="zerarAcerto()">Liquidar e Zerar</button></div>
@@ -2009,11 +2006,17 @@
                     const escPix = moto.pix ? moto.pix.replace(/'/g, "\\'") : '';
                     const escWhatsapp = moto.whatsapp ? moto.whatsapp.replace(/'/g, "\\'") : '';
 
+                    const isPendente = moto.pagamento_pendente === 1;
+                    const emRota = moto.status === 'EM_ROTA';
+
                     const card = document.createElement('div');
                     card.className = 'fleet-card';
                     card.dataset.moto = JSON.stringify(moto);
 
-                    if (ehNuvem) {
+                    if (isPendente) {
+                        card.style.border = '3px solid #dc2626';
+                        card.style.background = '#fef2f2';
+                    } else if (ehNuvem) {
                         card.style.background = '#f0f7ff';
                         card.style.borderLeft = '4px solid #3b82f6';
                     }
@@ -2027,10 +2030,10 @@
 
                     const botoesAcao = ehNuvem
                         ? `<button class="btn-action btn-edit" style="background:#eff6ff;color:#3b82f6;border-color:#bfdbfe;" onclick="abrirDadosNuvem('${moto.telegram_id}')">📋 Dados</button>
-                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}', '${moto.whatsapp || ''}', ${moto.pagamento_pendente || 0}, '${moto.status}')">💲 Acerto</button>
-                           <button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')" ${moto.status === 'EM_ROTA' ? 'disabled title="Em rota — cancelamento bloqueado"' : ''}>❌ Cancelar</button>`
+                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
+                           ${emRota ? '' : `<button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')">❌ Cancelar</button>`}`
                         : `<button class="btn-action btn-edit" onclick="abrirModalEditar('${moto.telegram_id}', '${escNome}', '${escWhatsapp}', '${moto.vinculo}', '${moto.veiculo || ''}', '${escPix}')">✏️ Editar</button>
-                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}', '${moto.whatsapp || ''}', ${moto.pagamento_pendente || 0}, '${moto.status}')">💲 Acerto</button>
+                           <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
                            <button class="btn-action btn-history" onclick="abrirModalHistorico('${moto.telegram_id}', '${escNome}')">📜 Histórico</button>
                            <button class="btn-action" style="background:#fef9c3;color:#854d0e;border-color:#fde047;" onclick="iniciarChatMotoboy('${moto.telegram_id}', '${escNome.split(' ')[0]}')">💬 Falar</button>`;
 
@@ -2043,7 +2046,7 @@
                             <div style="margin-top: 8px; font-size: 0.75rem;">📡 <i>Sinal GPS: ${dataFormatada}</i></div>
                         </div>
                         <div style="display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 15px;">
-                            <button class="btn-action btn-loc" onclick="localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')">👁️ Ver</button>
+                            ${isPendente ? '' : `<button class="btn-action btn-loc" onclick="localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')">👁️ Ver</button>`}
                             ${botoesAcao}
                         </div>
                     `;
@@ -2182,36 +2185,10 @@
         }
 
         let financeiroAtual = null;
-        async function abrirModalFinanceiro(id, nome, chavePix, whatsapp, pagamentoPendente, statusMotoboy) {
+        async function abrirModalFinanceiro(id, nome, chavePix) {
             financeiroAtual = id;
             document.getElementById('fin-nome').innerText = nome;
             document.getElementById('fin-chave-pix').innerText = chavePix || 'Não cadastrada';
-
-            // Popula WhatsApp clicável (só Nuvem geralmente tem)
-            const finWhatsRow = document.getElementById('fin-whatsapp-row');
-            const finWhatsLink = document.getElementById('fin-whatsapp-link');
-            if (whatsapp) {
-                const num = String(whatsapp).replace(/\D/g, '');
-                finWhatsLink.href = `https://wa.me/${num}`;
-                finWhatsLink.textContent = whatsapp;
-                finWhatsRow.style.display = 'block';
-            } else {
-                finWhatsRow.style.display = 'none';
-            }
-
-            // Visual vermelho quando há pagamento pendente ou aguardando confirmação
-            const card = document.querySelector('#modal-financeiro .modal-card');
-            const isPendente = pagamentoPendente === 1 || statusMotoboy === 'aguardando_confirmacao';
-            if (isPendente) {
-                card.style.border = '3px solid #dc2626';
-                card.style.background = '#fef2f2';
-                document.getElementById('fin-total').style.color = '#dc2626';
-            } else {
-                card.style.border = '';
-                card.style.background = '';
-                document.getElementById('fin-total').style.color = '#10b981';
-            }
-
             document.getElementById('modal-financeiro').style.display = 'flex';
             await carregarExtrato(id, chavePix, nome);
         }
