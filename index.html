@@ -129,6 +129,11 @@
         #login-error { background: #fef2f2; color: #b91c1c; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; display: none; border: 1px solid #fecaca; }
         #btn-logout { position: fixed; bottom: 16px; left: 0; width: 260px; background: none; border: none; color: #64748b; font-size: 0.8rem; cursor: pointer; padding: 10px; text-align: center; font-family: var(--font-main); transition: color 0.2s; }
         #btn-logout:hover { color: #ef4444; }
+        @keyframes pulse-coletar {
+            0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+            70%  { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+            100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+        }
     </style>
 </head>
 <body>
@@ -1357,7 +1362,7 @@
                     const coletadoLabel = pac.coletado ? ' <span style="font-size:0.7rem; background:#10b981; color:#fff; border-radius:4px; padding:1px 5px;">Coletado</span>' : '';
                     let headerText = isPendente ? `⏳ AGUARDANDO: ${motoboyNome.split(' ')[0]}${coletadoLabel}` : `🚀 ROTA: ${motoboyNome.split(' ')[0]}${coletadoLabel}`;
                     let headerColor = isPendente ? '#b45309' : '#1d4ed8';
-                    let btnColetarHTML = (!isPendente && !pac.coletado) ? `<button class="btn-create" style="background:#10b981; padding:4px 8px; margin-right:0;" onclick="confirmarColeta('${pac.id}')">📦 Confirmar Coleta</button>` : '';
+                    let btnColetarHTML = (!isPendente && !pac.coletado) ? `<button class="btn-create" style="background:#10b981; padding:8px 14px; margin-right:0; font-size:0.85rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; box-shadow:0 0 0 0 rgba(16,185,129,0.7); animation: pulse-coletar 2s infinite; border:2px solid #047857;" onclick="confirmarColeta('${pac.id}')">📦 Confirmar Coleta</button>` : '';
                     let btnCancelarHTML = !pac.coletado ? `<button class="btn-create" style="background:#ef4444; padding:4px 8px" onclick="cancelarDespacho('${pac.id}')">✖ Cancelar</button>` : '';
                     const primeiroPedidoComTel = pac.pedidosIds.map(pid => pedidos.find(x => x.id === pid)).find(p => p && (p.telefone || p.telefoneCliente || p.whatsapp || p.telefone_cliente));
                     const telCliente = primeiroPedidoComTel ? (primeiroPedidoComTel.telefone || primeiroPedidoComTel.telefoneCliente || primeiroPedidoComTel.whatsapp || primeiroPedidoComTel.telefone_cliente) : null;
