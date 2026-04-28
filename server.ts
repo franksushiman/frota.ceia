@@ -154,6 +154,12 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                     method: 'POST',
                     body: JSON.stringify({ pacote_id: msg.pacote_id, telegram_id: msg.telegram_id, ok: true, taxa: pedido.taxa, pacote_concluido: pacoteConcluido })
                 }).catch((e: any) => broadcastLog('HUB', `Falha ao reportar baixa-resposta ao Hub: ${e.message}`));
+            } else if (msg.tipo === 'pgto_confirmado') {
+                await atualizarCamposMotoboy(String(msg.telegram_id), { status: 'OFFLINE', pagamento_pendente: 0 });
+                await broadcastLog('FINANCEIRO', `✅ Motoboy ${msg.telegram_id} confirmou recebimento do pagamento.`);
+
+            } else if (msg.tipo === 'pgto_pendente') {
+                await broadcastLog('FINANCEIRO', `⚠️ Motoboy ${msg.telegram_id} reporta que ainda não recebeu o pagamento.`);
             }
             // tipo desconhecido: ignora silenciosamente
             processadas++;
@@ -412,7 +418,19 @@ export async function startServer() {
 
         const motoboy = await getMotoboyByTelegramId(telegram_id);
         if (motoboy?.telegram_id) {
-            await enviarConfirmacaoPagamento(motoboy.telegram_id, telegram_id, valorTotal);
+            if (motoboy.vinculo === 'Nuvem') {
+                try {
+                    await hubFetch('/rota/confirmar-pagamento', {
+                        method: 'POST',
+                        body: JSON.stringify({ telegram_id: motoboy.telegram_id, valor: valorTotal })
+                    });
+                    console.log('[PGTO] Confirmação enviada via Hub para motoboy Nuvem.');
+                } catch (e: any) {
+                    console.error('[PGTO] Falha ao enviar via Hub:', e?.message);
+                }
+            } else {
+                await enviarConfirmacaoPagamento(motoboy.telegram_id, telegram_id, valorTotal);
+            }
         }
 
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true, aguardando_confirmacao: true });
@@ -1191,6 +1209,23 @@ async function aceitar(){
                         await processarMensagensNuvem(msgs);
                     }
                 } catch (_) { /* silencia erros pontuais por pacote */ }
+            }
+            // Dreana eventos de pagamento (chave 'pgto_<telegram_id>') de motoboys aguardando confirmação
+            try {
+                const fleet = await getFleet();
+                const aguardandoPgto = fleet.filter((m: any) => m.status === 'aguardando_confirmacao' && m.vinculo === 'Nuvem');
+                for (const moto of aguardandoPgto) {
+                    try {
+                        const { data } = await hubFetch(`/rota/mensagens-pendentes?pacote_id=${encodeURIComponent('pgto_' + moto.telegram_id)}`);
+                        const msgs: any[] = data?.mensagens || [];
+                        if (msgs.length) {
+                            console.log('[PGTO DRAIN] motoboy', moto.telegram_id, 'tem', msgs.length, 'eventos pgto');
+                            await processarMensagensNuvem(msgs);
+                        }
+                    } catch (_) { /* silencia falhas pontuais */ }
+                }
+            } catch (e: any) {
+                console.error('[PGTO DRAIN] erro:', e?.message || e);
             }
         } catch (e: any) {
             console.error('[NUVEM DRAIN] erro no ciclo:', e?.message || e);
