@@ -131,8 +131,18 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 }
                 const pacoteConcluido = pacote.pedidosIds.length === 0;
                 if (pacoteConcluido) {
+                    if (pacote.taxa_deslocamento && pacote.taxa_deslocamento > 0 && pacote.deslocamento_pago === false) {
+                        await registrarEntrega(msg.telegram_id, pacote.taxa_deslocamento);
+                        await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', pacote.taxa_deslocamento, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
+                        await broadcastLog('FINANCEIRO', `Taxa de deslocamento Nuvem de R$${pacote.taxa_deslocamento.toFixed(2)} faturada.`);
+                    }
                     await deletePacote(pacote.id);
                     await atualizarCamposMotoboy(msg.telegram_id, { status: 'ONLINE' });
+                    const motoboyFinal = await getMotoboyByTelegramId(msg.telegram_id);
+                    if (motoboyFinal?.vinculo === 'Nuvem') {
+                        await deletarMotoboy(msg.telegram_id);
+                        console.log('[NUVEM DRAIN] Motoboy Nuvem removido da fleet local após baixa final:', msg.telegram_id);
+                    }
                 } else {
                     await savePacote(pacote);
                 }
@@ -710,7 +720,8 @@ async function aceitar(){
         await savePacote(pacote);
 
         if (pacote.motoboy?.telegram_id) {
-            const isNuvem = pacote.motoboy?.vinculo === 'Nuvem' || pacote.motoboy?.no_url === 'GLOBAL';
+            const motoboyDb = await getMotoboyByTelegramId(pacote.motoboy.telegram_id);
+            const isNuvem = motoboyDb?.vinculo === 'Nuvem';
             if (isNuvem) {
                 try {
                     await hubFetch('/rota/coleta-confirmada', {
@@ -744,6 +755,42 @@ async function aceitar(){
         }
 
         await broadcastLog('OPERACAO', `Coleta confirmada para o pacote ${pacoteId}.`);
+        return reply.send({ ok: true });
+    });
+
+    app.post('/api/operacao/cancelar-despacho', async (request: any, reply) => {
+        const { pacoteId } = request.body || {};
+        if (!pacoteId) return reply.code(400).send({ error: 'pacoteId \u00e9 obrigat\u00f3rio.' });
+
+        const pacotesRaw = await getPacotes();
+        const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacote = pacotes.find((p: any) => p.id === pacoteId);
+        if (!pacote) return reply.code(404).send({ error: 'Pacote n\u00e3o encontrado.' });
+
+        if (pacote.motoboy?.telegram_id) {
+            const motoboyDb = await getMotoboyByTelegramId(pacote.motoboy.telegram_id);
+            const isNuvem = motoboyDb?.vinculo === 'Nuvem';
+            if (isNuvem) {
+                try {
+                    await hubFetch('/rota/cancelar', {
+                        method: 'POST',
+                        body: JSON.stringify({ pacote_id: pacoteId })
+                    });
+                    console.log('[CANCELAR] Notifica\u00e7\u00e3o de cancelamento enviada via Hub.');
+                } catch (e: any) {
+                    console.error('[CANCELAR] Falha ao notificar Hub:', e?.message);
+                }
+                await deletarMotoboy(pacote.motoboy.telegram_id);
+            } else {
+                await enviarMensagemTelegram(pacote.motoboy.telegram_id, '\u26a0\ufe0f *A loja cancelou esta entrega.* Voc\u00ea n\u00e3o precisa mais ir at\u00e9 l\u00e1.');
+            }
+        }
+
+        pacote.status = 'AGUARDANDO';
+        pacote.motoboy = null;
+        pacote.coletado = false;
+        await savePacote(pacote);
+        await broadcastLog('OPERACAO', `Despacho cancelado para o pacote ${pacoteId}.`);
         return reply.send({ ok: true });
     });
 
@@ -962,7 +1009,7 @@ async function aceitar(){
     });
 
     app.post('/api/frota-compartilhada/convidar', async (request: any, reply) => {
-        const { telegram_id, no_url, no_nome, pacoteId, pedidos, taxa_deslocamento_brl, distancia_km, nome } = request.body || {};
+        const { telegram_id, no_url, no_nome, pacoteId, pedidos, taxa_deslocamento_brl, distancia_km, nome, whatsapp, pix, veiculo } = request.body || {};
         if (!telegram_id || !no_url) return reply.code(400).send({ error: 'telegram_id e no_url s\u00e3o obrigat\u00f3rios.' });
 
         const motoboyLocal = await getMotoboyByTelegramId(telegram_id);
@@ -979,7 +1026,7 @@ async function aceitar(){
         const valor_total = taxa_desl + taxa_entrega;
 
         if (no_url === 'GLOBAL') {
-            await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE', no_url: 'GLOBAL', no_nome: no_nome || nome || telegram_id, taxa_deslocamento: taxa_desl, distancia_km: distancia_km || 0 });
+            await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE', no_url: 'GLOBAL', no_nome: no_nome || nome || telegram_id, taxa_deslocamento: taxa_desl, distancia_km: distancia_km || 0, whatsapp: whatsapp || '', pix: pix || '', veiculo: veiculo || '' });
             await broadcastLog('FROTA', `Parceiro Global ${nome || telegram_id} adicionado provisoriamente \u00e0 frota.`);
 
             if (pacoteId) {
