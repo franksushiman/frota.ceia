@@ -1532,13 +1532,27 @@
             showToast(`Pacote enviado! Aguardando confirmação de ${motoboy.nome.split(' ')[0]}.`);
         }
 
-        function cancelarDespacho(pacId) {
-            const pac = pacotes.find(p => p.id === pacId);
-            pac.status = 'AGUARDANDO';
-            pac.motoboy = null;
-            salvarKanbanStorage();
-            renderizarKanban();
-            showToast('O pacote retornou para Aguardando Coleta.');
+        async function cancelarDespacho(pacId) {
+            if (!confirm('Cancelar este despacho? Se for motoboy Nuvem, ele será notificado.')) return;
+            try {
+                const res = await fetch('/api/operacao/cancelar-despacho', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pacoteId: pacId })
+                });
+                if (!res.ok) throw new Error('Falha no servidor.');
+                const pac = pacotes.find(p => p.id === pacId);
+                if (pac) {
+                    pac.status = 'AGUARDANDO';
+                    pac.motoboy = null;
+                    pac.coletado = false;
+                    await salvarKanbanStorage();
+                    renderizarKanban();
+                }
+                showToast('Despacho cancelado. Motoboy notificado.', 'success');
+            } catch(e) {
+                showToast('Falha ao cancelar despacho.', 'error');
+            }
         }
 
         function finalizarEntregaUnica(pacId, pedId) {
@@ -2462,7 +2476,7 @@
                 const res = await fetch('/api/frota-compartilhada/convidar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, no_nome: m.no_nome, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km })
+                    body: JSON.stringify({ telegram_id: m.telegram_id, nome: m.nome, no_url: m.no_url, no_nome: m.no_nome, pacoteId, pedidos: pedidosDoPacote, taxa_deslocamento_brl: m.taxa_deslocamento_brl, distancia_km: m.distancia_km, whatsapp: m.whatsapp || '', pix: m.pix || '', veiculo: m.veiculo || '' })
                 });
                 if (!res.ok) { const d = await res.json(); return showToast(d.error || 'Erro ao convidar.', 'error'); }
 
