@@ -140,8 +140,8 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                     await atualizarCamposMotoboy(msg.telegram_id, { status: 'ONLINE' });
                     const motoboyFinal = await getMotoboyByTelegramId(msg.telegram_id);
                     if (motoboyFinal?.vinculo === 'Nuvem') {
-                        await deletarMotoboy(msg.telegram_id);
-                        console.log('[NUVEM DRAIN] Motoboy Nuvem removido da fleet local após baixa final:', msg.telegram_id);
+                        await atualizarCamposMotoboy(msg.telegram_id, { pagamento_pendente: 1 });
+                        console.log('[NUVEM DRAIN] Motoboy Nuvem marcado com pagamento_pendente=1:', msg.telegram_id);
                     }
                 } else {
                     await savePacote(pacote);
