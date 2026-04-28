@@ -51,7 +51,7 @@ export async function initDatabase(): Promise<Database> {
             CREATE TABLE IF NOT EXISTS motoboys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 telegram_id TEXT UNIQUE,
-                nome TEXT, cpf TEXT, vinculo TEXT, pix TEXT, veiculo TEXT,
+                nome TEXT, cpf TEXT, vinculo TEXT, whatsapp TEXT, pix TEXT, veiculo TEXT,
                 status TEXT DEFAULT 'OFFLINE',
                 lat REAL, lng REAL, ultima_atualizacao TEXT,
                 pagamento_pendente INTEGER DEFAULT 0,
@@ -65,6 +65,7 @@ export async function initDatabase(): Promise<Database> {
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN no_nome TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN taxa_deslocamento REAL;'); } catch (e) {}
         try { await database.exec('ALTER TABLE motoboys ADD COLUMN distancia_km REAL;'); } catch (e) {}
+        try { await database.exec("ALTER TABLE motoboys ADD COLUMN whatsapp TEXT NOT NULL DEFAULT '';"); } catch (e) {}
 
         await database.exec(`
             CREATE TABLE IF NOT EXISTS entregas (
