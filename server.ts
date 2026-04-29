@@ -131,12 +131,15 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 }
                 const pacoteConcluido = pacote.pedidosIds.length === 0;
                 if (pacoteConcluido) {
-                    if (pacote.taxa_deslocamento && pacote.taxa_deslocamento > 0 && !pacote.deslocamento_pago) {
-                        await registrarEntrega(msg.telegram_id, pacote.taxa_deslocamento);
-                        await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', pacote.taxa_deslocamento, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
-                        await broadcastLog('FINANCEIRO', `Taxa de deslocamento Nuvem de R$${pacote.taxa_deslocamento.toFixed(2)} faturada.`);
+                    const taxaDesl = Number(pacote.taxa_deslocamento) || 0;
+                    if (taxaDesl > 0 && !pacote.deslocamento_pago) {
+                        await registrarEntrega(msg.telegram_id, taxaDesl);
+                        await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', taxaDesl, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
+                        await broadcastLog('FINANCEIRO', `Taxa de deslocamento Nuvem de R$${taxaDesl.toFixed(2)} faturada.`);
                         pacote.deslocamento_pago = true;
-                        console.log('[NUVEM DRAIN] Deslocamento de R$' + pacote.taxa_deslocamento.toFixed(2) + ' faturado para', msg.telegram_id);
+                        console.log('[NUVEM DRAIN] Deslocamento R$' + taxaDesl.toFixed(2) + ' faturado para', msg.telegram_id);
+                    } else {
+                        console.log('[NUVEM DRAIN] Deslocamento NÃO faturado. taxaDesl=', taxaDesl, 'pago=', pacote.deslocamento_pago);
                     }
                     await deletePacote(pacote.id);
                     await atualizarCamposMotoboy(msg.telegram_id, { status: 'ONLINE' });
@@ -800,7 +803,12 @@ async function aceitar(){
                 } catch (e: any) {
                     console.error('[CANCELAR] Falha ao notificar Hub:', e?.message);
                 }
-                await deletarMotoboy(pacote.motoboy.telegram_id);
+                if (motoboyDb?.pagamento_pendente !== 1) {
+                    await deletarMotoboy(pacote.motoboy.telegram_id);
+                    console.log('[CANCELAR] Motoboy Nuvem removido da fleet (sem pagamento pendente).');
+                } else {
+                    console.log('[CANCELAR] Motoboy Nuvem MANTIDO na fleet (pagamento pendente).');
+                }
             } else {
                 await enviarMensagemTelegram(pacote.motoboy.telegram_id, '\u26a0\ufe0f *A loja cancelou esta entrega.* Voc\u00ea n\u00e3o precisa mais ir at\u00e9 l\u00e1.');
             }
@@ -1033,8 +1041,11 @@ async function aceitar(){
         if (!telegram_id || !no_url) return reply.code(400).send({ error: 'telegram_id e no_url s\u00e3o obrigat\u00f3rios.' });
 
         const motoboyLocal = await getMotoboyByTelegramId(telegram_id);
-        if (motoboyLocal && (motoboyLocal.status === 'EM_ROTA' || motoboyLocal.pagamento_pendente === 1)) {
-            return reply.code(409).send({ error: 'Motoboy indispon\u00edvel: em rota ou com pagamento pendente.' });
+        if (motoboyLocal?.pagamento_pendente === 1) {
+            return reply.code(409).send({ error: 'Motoboy com pagamento pendente. Quite o acerto antes de chamá-lo novamente.' });
+        }
+        if (motoboyLocal && motoboyLocal.status === 'EM_ROTA') {
+            return reply.code(409).send({ error: 'Motoboy indisponível: em rota.' });
         }
 
         const config = await getConfiguracoes();
