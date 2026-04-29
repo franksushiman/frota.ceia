@@ -160,7 +160,13 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                     body: JSON.stringify({ pacote_id: msg.pacote_id, telegram_id: msg.telegram_id, ok: true, taxa: pedido.taxa, pacote_concluido: pacoteConcluido })
                 }).catch((e: any) => broadcastLog('HUB', `Falha ao reportar baixa-resposta ao Hub: ${e.message}`));
             } else if (msg.tipo === 'pgto_confirmado') {
-                await atualizarCamposMotoboy(String(msg.telegram_id), { status: 'OFFLINE', pagamento_pendente: 0 });
+                const m = await getMotoboyByTelegramId(String(msg.telegram_id));
+                if (m?.vinculo === 'Nuvem') {
+                    await deletarMotoboy(String(msg.telegram_id));
+                    console.log('[NUVEM DRAIN] Motoboy Nuvem removido da fleet após confirmar recebimento:', msg.telegram_id);
+                } else {
+                    await atualizarCamposMotoboy(String(msg.telegram_id), { status: 'OFFLINE', pagamento_pendente: 0 });
+                }
                 await broadcastLog('FINANCEIRO', `✅ Motoboy ${msg.telegram_id} confirmou recebimento do pagamento.`);
 
             } else if (msg.tipo === 'pgto_pendente') {
