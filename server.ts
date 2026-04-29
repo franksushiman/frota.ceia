@@ -131,6 +131,7 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 }
                 const pacoteConcluido = pacote.pedidosIds.length === 0;
                 if (pacoteConcluido) {
+                    console.log('[NUVEM DRAIN DEBUG] pacote completo no momento da baixa:', JSON.stringify(pacote));
                     const taxaDesl = Number(pacote.taxa_deslocamento) || 0;
                     if (taxaDesl > 0 && !pacote.deslocamento_pago) {
                         await registrarEntrega(msg.telegram_id, taxaDesl);
@@ -1047,9 +1048,6 @@ async function aceitar(){
         if (!telegram_id || !no_url) return reply.code(400).send({ error: 'telegram_id e no_url s\u00e3o obrigat\u00f3rios.' });
 
         const motoboyLocal = await getMotoboyByTelegramId(telegram_id);
-        if (motoboyLocal?.pagamento_pendente === 1) {
-            return reply.code(409).send({ error: 'Motoboy com pagamento pendente. Quite o acerto antes de chamá-lo novamente.' });
-        }
         if (motoboyLocal && motoboyLocal.status === 'EM_ROTA') {
             return reply.code(409).send({ error: 'Motoboy indisponível: em rota.' });
         }
@@ -1063,6 +1061,11 @@ async function aceitar(){
         const valor_total = taxa_desl + taxa_entrega;
 
         if (no_url === 'GLOBAL') {
+            const existing = await getMotoboyByTelegramId(telegram_id);
+            if (existing && existing.vinculo !== 'Nuvem') {
+                console.log('[FROTA_COMPARTILHADA] Motoboy', telegram_id, 'existia como', existing.vinculo, '- forçando para Nuvem.');
+                await atualizarCamposMotoboy(telegram_id, { vinculo: 'Nuvem', no_url: 'GLOBAL' });
+            }
             await upsertFleet({ telegram_id, nome: nome || telegram_id, vinculo: 'Nuvem', status: 'ONLINE', no_url: 'GLOBAL', no_nome: no_nome || nome || telegram_id, taxa_deslocamento: taxa_desl, distancia_km: distancia_km || 0, whatsapp: whatsapp || '', pix: pix || '', veiculo: veiculo || '' });
             await broadcastLog('FROTA', `Parceiro Global ${nome || telegram_id} adicionado provisoriamente \u00e0 frota.`);
 
