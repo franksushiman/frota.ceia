@@ -131,10 +131,12 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 }
                 const pacoteConcluido = pacote.pedidosIds.length === 0;
                 if (pacoteConcluido) {
-                    if (pacote.taxa_deslocamento && pacote.taxa_deslocamento > 0 && pacote.deslocamento_pago === false) {
+                    if (pacote.taxa_deslocamento && pacote.taxa_deslocamento > 0 && !pacote.deslocamento_pago) {
                         await registrarEntrega(msg.telegram_id, pacote.taxa_deslocamento);
                         await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', pacote.taxa_deslocamento, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
                         await broadcastLog('FINANCEIRO', `Taxa de deslocamento Nuvem de R$${pacote.taxa_deslocamento.toFixed(2)} faturada.`);
+                        pacote.deslocamento_pago = true;
+                        console.log('[NUVEM DRAIN] Deslocamento de R$' + pacote.taxa_deslocamento.toFixed(2) + ' faturado para', msg.telegram_id);
                     }
                     await deletePacote(pacote.id);
                     await atualizarCamposMotoboy(msg.telegram_id, { status: 'ONLINE' });
