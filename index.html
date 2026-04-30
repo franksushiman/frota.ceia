@@ -1662,6 +1662,21 @@
 
         let mapRastreio = null;
         let markerRastreio = null;
+        async function localizarNuvem(telegram_id, nome) {
+            try {
+                const res = await fetch(`/api/frota-compartilhada/motoboy-localizacao/${encodeURIComponent(telegram_id)}`);
+                if (!res.ok) {
+                    return showToast(`Sem sinal de GPS para ${nome} no momento.`, 'error');
+                }
+                const data = await res.json();
+                if (!data?.lat || !data?.lng) {
+                    return showToast(`Sem sinal de GPS para ${nome} no momento.`, 'error');
+                }
+                localizarNoMapa(data.lat, data.lng, nome);
+            } catch(e) {
+                showToast('Falha ao consultar localização do motoboy.', 'error');
+            }
+        }
         function localizarNoMapa(lat, lng, nome) {
             if (!lat || !lng) return showToast(`Sem sinal de GPS para ${nome} no momento.`, 'error');
             document.getElementById('track-nome').innerText = nome;
@@ -2049,7 +2064,7 @@
                             <div style="margin-top: 8px; font-size: 0.75rem;">📡 <i>Sinal GPS: ${dataFormatada}</i></div>
                         </div>
                         <div style="display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 15px;">
-                            ${isPendente ? '' : `<button class="btn-action btn-loc" onclick="localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')">👁️ Ver</button>`}
+                            ${isPendente ? '' : `<button class="btn-action btn-loc" onclick="${moto.vinculo === 'Nuvem' ? `localizarNuvem('${moto.telegram_id}', '${escNome}')` : `localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')`}">👁️ Ver</button>`}
                             ${botoesAcao}
                         </div>
                     `;
