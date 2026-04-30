@@ -305,6 +305,14 @@ export async function registrarEntrega(telegram_id: string, valor_entrega: numbe
     return true;
 }
 
+export async function registrarDeslocamento(telegram_id: string, taxa_deslocamento: number, distancia_km: number = 0): Promise<void> {
+    const database = await initDatabase();
+    await database.run(
+        "INSERT INTO entregas (telegram_id, valor_entrega, distancia_km, taxa_deslocamento, status, data) VALUES (?, ?, ?, ?, 'PENDENTE', ?)",
+        telegram_id, 0, distancia_km, taxa_deslocamento, new Date().toISOString()
+    );
+}
+
 export async function getExtratoFinanceiro(telegram_id: string) {
     const database = await initDatabase();
 

@@ -32,7 +32,7 @@ setInterval(() => {
     for (const [t, d] of dispatchTokens) if (d.expiresAt < now) dispatchTokens.delete(t);
 }, 5 * 60 * 1000);
 
-import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
+import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, registrarDeslocamento, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
 import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC, traduzirMotoboyParaCliente, isIgnorar } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog, broadcastMessage } from './logger';
@@ -137,7 +137,7 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                     console.log('[NUVEM DRAIN DEBUG] taxa_deslocamento lida do motoboy:', taxaDesl);
 
                     if (taxaDesl > 0 && !pacote.deslocamento_pago) {
-                        await registrarEntrega(msg.telegram_id, taxaDesl);
+                        await registrarDeslocamento(msg.telegram_id, taxaDesl, motoboyDb?.distancia_km || 0);
                         await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', taxaDesl, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
                         await broadcastLog('FINANCEIRO', `Taxa de deslocamento Nuvem de R$${taxaDesl.toFixed(2)} faturada.`);
                         pacote.deslocamento_pago = true;
