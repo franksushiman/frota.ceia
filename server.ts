@@ -1019,6 +1019,17 @@ async function aceitar(){
         return reply.send(disponiveis);
     });
 
+    app.get('/api/frota-compartilhada/motoboy-localizacao/:telegram_id', async (request: any, reply) => {
+        const { telegram_id } = request.params;
+        if (!telegram_id) return reply.code(400).send({ error: 'telegram_id é obrigatório.' });
+        try {
+            const { data } = await hubFetch(`/rota/motoboy-localizacao?telegram_id=${encodeURIComponent(telegram_id)}`);
+            return reply.send(data || {});
+        } catch (e: any) {
+            return reply.code(502).send({ error: e?.message || 'Falha ao consultar Hub.' });
+        }
+    });
+
     app.get('/api/frota-compartilhada/buscar', async (_request, reply) => {
         const config = await getConfiguracoes();
 
