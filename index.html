@@ -1475,7 +1475,10 @@
             try {
                 const res = await fetch('/api/fleet');
                 const frota = await res.json();
-                const online = frota.filter(m => m.status === 'ONLINE' || m.status === 'EM_ENTREGA');
+                const online = frota.filter(m =>
+                    (m.status === 'ONLINE' || m.status === 'EM_ENTREGA') &&
+                    m.vinculo !== 'Nuvem'
+                );
 
                 if (online.length === 0) {
                     container.innerHTML = '<p style="color:#ef4444; font-size:0.85rem">Nenhum motoboy operando no momento.</p>';
