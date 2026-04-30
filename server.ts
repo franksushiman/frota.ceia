@@ -451,6 +451,14 @@ export async function startServer() {
         return reply.code(200).type('application/json; charset=utf-8').send({ ok: true, aguardando_confirmacao: true });
     });
 
+    app.post('/api/financeiro/cancelar-confirmacao/:telegram_id', async (request: any, reply) => {
+        const { telegram_id } = request.params;
+        if (!telegram_id) return reply.code(400).send({ error: 'telegram_id é obrigatório.' });
+        await atualizarCamposMotoboy(telegram_id, { status: 'OFFLINE', pagamento_pendente: 1 });
+        await broadcastLog('FINANCEIRO', `Confirmação de pagamento cancelada manualmente. Motoboy ${telegram_id} permanece com pagamento pendente.`);
+        return reply.send({ ok: true });
+    });
+
     app.get('/api/historico/:telegram_id', async (request: any, reply) => {
         const historico = await getHistoricoMotoboy(request.params.telegram_id);
         return reply.code(200).type('application/json; charset=utf-8').send(historico);

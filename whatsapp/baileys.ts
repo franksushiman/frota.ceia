@@ -708,6 +708,19 @@ D. consultar_status_pedido retornou uma resposta E o cliente insiste pela segund
                 const telegramId = pacote.motoboy?.telegram_id;
                 const frota = await getFleet();
                 const motoboyDb = frota?.find((m: any) => m.telegram_id === telegramId);
+                if (motoboyDb?.vinculo === 'Nuvem' && (!motoboyDb.lat || !motoboyDb.lng)) {
+                    try {
+                        const HUB_URL = process.env.HUB_URL;
+                        const res = await fetch(`${HUB_URL}/wp-json/ceia/v1/rota/motoboy-localizacao?telegram_id=${encodeURIComponent(telegramId)}`);
+                        if (res.ok) {
+                            const data = await res.json() as any;
+                            if (data?.lat && data?.lng) {
+                                motoboyDb.lat = data.lat;
+                                motoboyDb.lng = data.lng;
+                            }
+                        }
+                    } catch (_) {}
+                }
                 const primeiroNome = motoboyDb?.nome?.split(' ')[0]
                     || pacote.motoboy?.nome?.split(' ')[0]
                     || 'o entregador';

@@ -2031,7 +2031,10 @@
                     card.className = 'fleet-card';
                     card.dataset.moto = JSON.stringify(moto);
 
-                    if (isPendente) {
+                    if (emRota) {
+                        card.style.border = '3px solid #1d4ed8';
+                        card.style.background = '#eff6ff';
+                    } else if (isPendente) {
                         card.style.border = '3px solid #dc2626';
                         card.style.background = '#fef2f2';
                     } else if (ehNuvem) {
@@ -2064,7 +2067,7 @@
                             <div style="margin-top: 8px; font-size: 0.75rem;">📡 <i>Sinal GPS: ${dataFormatada}</i></div>
                         </div>
                         <div style="display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 15px;">
-                            ${isPendente ? '' : `<button class="btn-action btn-loc" onclick="${moto.vinculo === 'Nuvem' ? `localizarNuvem('${moto.telegram_id}', '${escNome}')` : `localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')`}">👁️ Ver</button>`}
+                            ${(isPendente && !emRota) ? '' : `<button class="btn-action btn-loc" onclick="${moto.vinculo === 'Nuvem' ? `localizarNuvem('${moto.telegram_id}', '${escNome}')` : `localizarNoMapa(${moto.lat || null}, ${moto.lng || null}, '${escNome}')`}">👁️ Ver</button>`}
                             ${botoesAcao}
                         </div>
                     `;
@@ -2236,12 +2239,29 @@
         async function zerarAcerto() {
             confirmarAcao("Confirma pagamento?", async () => {
                 const res = await fetch(`/api/financeiro/pagar/${financeiroAtual}`, { method: 'POST' });
-                fecharModal('modal-financeiro');
                 if (res.ok) {
                     const btn = document.getElementById('btn-zerar-acerto');
                     if (btn) { btn.textContent = '⏳ Aguardando confirmação...'; btn.disabled = true; }
                     showToast('Pagamento registrado! Aguardando confirmação do motoboy.');
+                    setTimeout(() => {
+                        const b = document.getElementById('btn-zerar-acerto');
+                        if (b && b.disabled && b.textContent.includes('Aguardando')) {
+                            b.textContent = '❌ Cancelar Cobrança';
+                            b.disabled = false;
+                            b.onclick = async () => {
+                                if (!financeiroAtual) return;
+                                try {
+                                    await fetch(`/api/financeiro/cancelar-confirmacao/${encodeURIComponent(financeiroAtual)}`, { method: 'POST' });
+                                    showToast('Cobrança cancelada. Motoboy permanece com pagamento pendente.', 'success');
+                                    fecharModal('modal-financeiro');
+                                } catch(e) {
+                                    showToast('Erro ao cancelar cobrança.', 'error');
+                                }
+                            };
+                        }
+                    }, 30000);
                 } else {
+                    fecharModal('modal-financeiro');
                     showToast('Erro ao registrar pagamento.', 'error');
                 }
             });
