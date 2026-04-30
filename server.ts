@@ -132,19 +132,10 @@ async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
                 const pacoteConcluido = pacote.pedidosIds.length === 0;
                 if (pacoteConcluido) {
                     console.log('[NUVEM DRAIN DEBUG] pacote completo no momento da baixa:', JSON.stringify(pacote));
-                    let taxaDesl = Number(pacote.taxa_deslocamento) || 0;
-                    if (taxaDesl === 0) {
-                        // Pacote local não tem taxa_deslocamento - busca no Hub (fonte confiável)
-                        try {
-                            const { data } = await hubFetch(`/rota/status?pacote_id=${encodeURIComponent(msg.pacote_id)}`);
-                            if (data?.taxa_deslocamento) {
-                                taxaDesl = Number(data.taxa_deslocamento) || 0;
-                                console.log('[NUVEM DRAIN] Taxa de deslocamento recuperada do Hub: R$' + taxaDesl.toFixed(2));
-                            }
-                        } catch (e: any) {
-                            console.error('[NUVEM DRAIN] Falha ao buscar taxa_deslocamento no Hub:', e?.message);
-                        }
-                    }
+                    const motoboyDb = await getMotoboyByTelegramId(msg.telegram_id);
+                    const taxaDesl = Number(motoboyDb?.taxa_deslocamento) || 0;
+                    console.log('[NUVEM DRAIN DEBUG] taxa_deslocamento lida do motoboy:', taxaDesl);
+
                     if (taxaDesl > 0 && !pacote.deslocamento_pago) {
                         await registrarEntrega(msg.telegram_id, taxaDesl);
                         await inserirHistoricoMotoboy(msg.telegram_id, 'DESLOCAMENTO', taxaDesl, `Taxa de deslocamento Nuvem - rota ${pacote.id}`);
