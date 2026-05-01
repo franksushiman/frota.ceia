@@ -2031,15 +2031,14 @@
                     card.className = 'fleet-card';
                     card.dataset.moto = JSON.stringify(moto);
 
+                    card.style.border = '';
+                    card.style.background = '';
                     if (emRota) {
                         card.style.border = '3px solid #1d4ed8';
                         card.style.background = '#eff6ff';
                     } else if (isPendente) {
                         card.style.border = '3px solid #dc2626';
                         card.style.background = '#fef2f2';
-                    } else if (ehNuvem) {
-                        card.style.background = '#f0f7ff';
-                        card.style.borderLeft = '4px solid #3b82f6';
                     }
 
                     const nuvemBadge = ehNuvem
