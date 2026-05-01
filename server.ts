@@ -855,24 +855,18 @@ async function aceitar(){
         if (pacote?.motoboy?.telegram_id) {
             const motoboyDb = await getMotoboyByTelegramId(pacote.motoboy.telegram_id);
             if (motoboyDb?.vinculo === 'Nuvem') {
-                // Avisa o motoboy que a loja finalizou a entrega via Hub
+                // Apenas avisa o Hub. O Hub enfileira mensagem 'baixa' pra ser drenada pelo polling normal.
                 try {
                     await hubFetch('/rota/baixa-forcada', {
                         method: 'POST',
-                        body: JSON.stringify({ pacote_id: pacote.id })
+                        body: JSON.stringify({ pacote_id: pacote.id, pedido_id: pedidoId })
                     });
+                    await broadcastLog('OPERACAO', `Baixa Nuvem enfileirada via Hub para o pacote ${pacote.id}.`);
+                    return reply.send({ ok: true });
                 } catch (e: any) {
-                    console.error('[BAIXA NUVEM PAINEL] Falha ao avisar Hub:', e?.message);
+                    console.error('[BAIXA NUVEM PAINEL] Falha ao chamar Hub:', e?.message);
+                    return reply.code(502).send({ error: 'Falha ao registrar baixa no Hub.' });
                 }
-                // Reusa a lógica de baixa que já funciona quando motoboy digita o código pelo Telegram
-                await processarMensagensNuvem([{
-                    tipo: 'baixa',
-                    pacote_id: pacote.id,
-                    telegram_id: pacote.motoboy.telegram_id,
-                    codigo: pedido?.codigo_entrega,
-                }]);
-                await broadcastLog('OPERACAO', `Baixa Nuvem (forçada pela loja) processada via fluxo padrão.`);
-                return reply.send({ ok: true });
             }
         }
 
