@@ -855,13 +855,23 @@ async function aceitar(){
         if (pacote?.motoboy?.telegram_id) {
             const motoboyDb = await getMotoboyByTelegramId(pacote.motoboy.telegram_id);
             if (motoboyDb?.vinculo === 'Nuvem') {
-                // Apenas avisa o Hub. O Hub enfileira mensagem 'baixa' pra ser drenada pelo polling normal.
                 try {
                     await hubFetch('/rota/baixa-forcada', {
                         method: 'POST',
                         body: JSON.stringify({ pacote_id: pacote.id, pedido_id: pedidoId })
                     });
                     await broadcastLog('OPERACAO', `Baixa Nuvem enfileirada via Hub para o pacote ${pacote.id}.`);
+                    // Drena a fila do pacote IMEDIATAMENTE e processa, antes de o frontend deletar o pacote local
+                    try {
+                        const { data: dataDrain } = await hubFetch(`/rota/mensagens-pendentes?pacote_id=${encodeURIComponent(pacote.id)}`);
+                        const msgs: any[] = dataDrain?.mensagens || [];
+                        if (msgs.length) {
+                            console.log('[BAIXA NUVEM PAINEL] drenando', msgs.length, 'mensagens imediatamente');
+                            await processarMensagensNuvem(msgs);
+                        }
+                    } catch (e2: any) {
+                        console.error('[BAIXA NUVEM PAINEL] Falha ao drenar fila imediata:', e2?.message);
+                    }
                     return reply.send({ ok: true });
                 } catch (e: any) {
                     console.error('[BAIXA NUVEM PAINEL] Falha ao chamar Hub:', e?.message);
