@@ -2052,7 +2052,7 @@
                     const botoesAcao = ehNuvem
                         ? `<button class="btn-action btn-edit" style="background:#eff6ff;color:#3b82f6;border-color:#bfdbfe;" onclick="abrirDadosNuvem('${moto.telegram_id}')">📋 Dados</button>
                            <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
-                           ${emRota ? '' : `<button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')">❌ Cancelar</button>`}`
+                           ${(emRota || isPendente) ? '' : `<button id="btn-cancelar-nuvem-${moto.telegram_id}" class="btn-action btn-del" onclick="cancelarNuvem('${moto.telegram_id}', '${moto.status}')">❌ Cancelar</button>`}`
                         : `<button class="btn-action btn-edit" onclick="abrirModalEditar('${moto.telegram_id}', '${escNome}', '${escWhatsapp}', '${moto.vinculo}', '${moto.veiculo || ''}', '${escPix}')">✏️ Editar</button>
                            <button class="btn-action btn-pay" onclick="abrirModalFinanceiro('${moto.telegram_id}', '${escNome}', '${escPix}')">💲 Acerto</button>
                            <button class="btn-action btn-history" onclick="abrirModalHistorico('${moto.telegram_id}', '${escNome}')">📜 Histórico</button>

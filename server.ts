@@ -842,12 +842,58 @@ async function aceitar(){
 
     app.post('/api/operacao/baixa', async (request: any, reply) => {
         const { pedidoId } = request.body;
+        if (!pedidoId) return reply.code(400).send({ error: 'pedidoId é obrigatório.' });
+
+        const pedidosRaw = await getPedidos();
+        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pedido = pedidos.find((p: any) => String(p.id) === String(pedidoId));
 
         const pacotesRaw = await getPacotes();
         const pacotes = pacotesRaw.map((p: any) => JSON.parse(p.dados_json));
-        const pedidosRaw = await getPedidos();
-        const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
+        const pacote = pacotes.find((p: any) => p.pedidosIds?.map(String).includes(String(pedidoId)));
 
+        if (pacote?.motoboy?.telegram_id) {
+            const motoboyDb = await getMotoboyByTelegramId(pacote.motoboy.telegram_id);
+            if (motoboyDb?.vinculo === 'Nuvem') {
+                // Baixa Nuvem via Hub (avisa motoboy, fatura tudo, marca pendente)
+                try {
+                    const { data } = await hubFetch('/rota/baixa-forcada', {
+                        method: 'POST',
+                        body: JSON.stringify({ pacote_id: pacote.id })
+                    });
+                    console.log('[BAIXA NUVEM PAINEL] Hub respondeu:', data);
+
+                    // Faturar entrega + deslocamento aqui mesmo (sem esperar fila do Hub)
+                    await registrarEntrega(pacote.motoboy.telegram_id, pedido?.taxa || 0);
+                    await inserirHistoricoMotoboy(pacote.motoboy.telegram_id, 'ENTREGA', pedido?.taxa || 0, `Entrega Nuvem para ${pedido?.nomeCliente || 'Cliente'} (forçada pela loja)`);
+
+                    const taxaDesl = Number(motoboyDb.taxa_deslocamento) || Number(data?.taxa_deslocamento) || 0;
+                    if (taxaDesl > 0 && !pacote.deslocamento_pago) {
+                        await registrarDeslocamento(pacote.motoboy.telegram_id, taxaDesl, motoboyDb.distancia_km || 0);
+                        await inserirHistoricoMotoboy(pacote.motoboy.telegram_id, 'DESLOCAMENTO', taxaDesl, `Taxa de deslocamento Nuvem - rota ${pacote.id} (forçada pela loja)`);
+                        pacote.deslocamento_pago = true;
+                    }
+
+                    // Remove pedido e atualiza pacote
+                    pacote.pedidosIds = (pacote.pedidosIds || []).filter((id: string) => String(id) !== String(pedidoId));
+                    const concluido = pacote.pedidosIds.length === 0;
+                    if (concluido) {
+                        await deletePacote(pacote.id);
+                        await atualizarCamposMotoboy(pacote.motoboy.telegram_id, { status: 'OFFLINE', pagamento_pendente: 1 });
+                    } else {
+                        await savePacote(pacote);
+                    }
+                    await deletePedido(pedidoId);
+                    await broadcastLog('FINANCEIRO', `Baixa Nuvem (forçada pela loja) confirmada. Taxa de R$${(pedido?.taxa || 0).toFixed(2)} faturada.`);
+                    return reply.send({ ok: true });
+                } catch (e: any) {
+                    console.error('[BAIXA NUVEM PAINEL] Falha ao chamar Hub:', e?.message);
+                    return reply.code(502).send({ error: 'Falha ao finalizar via Hub.' });
+                }
+            }
+        }
+
+        // Caminho original (Fixo/Free)
         let rotaInfo: any = null;
         const pacotesAtivos = pacotes.filter((p: any) => p.status === 'PENDENTE_ACEITE' || p.status === 'EM_ROTA');
 
