@@ -1558,15 +1558,24 @@
             }
         }
 
-        function finalizarEntregaUnica(pacId, pedId) {
+        async function finalizarEntregaUnica(pacId, pedId) {
             confirmarAcao("Confirmar a entrega na porta deste cliente?", async () => {
                 try {
-                    fetch('/api/operacao/baixa', {
+                    const res = await fetch('/api/operacao/baixa', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ pedidoId: pedId })
                     });
-                } catch(e) {}
+                    if (!res.ok) {
+                        const d = await res.json().catch(() => ({}));
+                        showToast(d.error || 'Falha ao registrar baixa.', 'error');
+                        return;
+                    }
+                } catch(e) {
+                    showToast('Erro de comunicação ao registrar baixa.', 'error');
+                    return;
+                }
+                // Só mexe no estado local depois que o servidor confirmou
                 baixarPedidoPeloSistema(pedId);
             });
         }
