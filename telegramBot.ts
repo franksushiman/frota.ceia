@@ -171,11 +171,6 @@ export async function iniciarTelegram() {
                     status: 'CADASTRANDO' 
                 };
 
-                if (dadosParaBanco.whatsapp !== undefined) {
-                    dadosParaBanco.cpf = dadosParaBanco.whatsapp;
-                    delete dadosParaBanco.whatsapp;
-                }
-
                 await upsertFleet(dadosParaBanco);
 
                 if (userSessions[chatId]) {
@@ -780,7 +775,7 @@ Digite a mensagem abaixo e eu enviarei para o WhatsApp do cliente de forma ocult
                             telegram_id: chatId.toString(),
                             veiculo: text,
                             nome: nomeParaBanco,
-                            cpf: activeSession.data.whatsapp || null, 
+                            whatsapp: activeSession.data.whatsapp || null,
                             vinculo: activeSession.data.vinculo || null,
                             pix: activeSession.data.pix || null,
                             status: 'CADASTRANDO'

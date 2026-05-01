@@ -280,7 +280,7 @@ export async function deletarMotoboy(telegram_id: string) {
 export async function atualizarMotoboy(telegram_id: string, veiculo: string, vinculo: string, nome?: string, whatsapp?: string, pix?: string) {
     const database = await initDatabase();
     await database.run(
-        'UPDATE motoboys SET veiculo = ?, vinculo = ?, nome = COALESCE(?, nome), cpf = COALESCE(?, cpf), pix = COALESCE(?, pix) WHERE telegram_id = ?',
+        'UPDATE motoboys SET veiculo = ?, vinculo = ?, nome = COALESCE(?, nome), whatsapp = COALESCE(?, whatsapp), pix = COALESCE(?, pix) WHERE telegram_id = ?',
         [veiculo, vinculo, nome || null, whatsapp || null, pix || null, telegram_id]
     );
 }

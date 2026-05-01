@@ -346,10 +346,10 @@ export class BaileysProvider implements WhatsAppProvider {
                         const pedidosRaw = await getPedidos();
                         if (pedidosRaw?.length) {
                             const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
-                            const ultimos6 = numeroNormalizado.slice(-6);
+                            const ultimos8 = numeroNormalizado.slice(-8);
                             const pedidosDoCliente = pedidos.filter((p: any) => {
                                 const tel = (p.telefone || p.telefoneCliente || p.whatsapp || p.telefone_cliente || '').replace(/\D/g, '');
-                                return tel.length >= 6 && tel.slice(-6) === ultimos6;
+                                return tel.length >= 8 && tel.slice(-8) === ultimos8;
                             });
                             if (pedidosDoCliente.length > 0) {
                                 const pedidoMaisRecente = pedidosDoCliente.sort((a: any, b: any) =>
@@ -439,11 +439,11 @@ export class BaileysProvider implements WhatsAppProvider {
     private matchClienteBySuffix(jidBusca: string, jidsSet: Set<string>): boolean {
         if (jidsSet.has(jidBusca)) return true;
         const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
-        if (numBusca.length < 6) return false;
-        const ultimos6Busca = numBusca.slice(-6);
+        if (numBusca.length < 8) return false;
+        const ultimos8Busca = numBusca.slice(-8);
         for (const jidCandidato of jidsSet) {
             const numCandidato = jidCandidato.split('@')[0].replace(/\D/g, '');
-            if (numCandidato.length >= 6 && numCandidato.slice(-6) === ultimos6Busca) return true;
+            if (numCandidato.length >= 8 && numCandidato.slice(-8) === ultimos8Busca) return true;
         }
         return false;
     }
@@ -452,11 +452,11 @@ export class BaileysProvider implements WhatsAppProvider {
         const direto = map.get(jidBusca);
         if (direto !== undefined) return direto;
         const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
-        if (numBusca.length < 6) return undefined;
-        const ultimos6Busca = numBusca.slice(-6);
+        if (numBusca.length < 8) return undefined;
+        const ultimos8Busca = numBusca.slice(-8);
         for (const [jidKey, valor] of map.entries()) {
             const numKey = jidKey.split('@')[0].replace(/\D/g, '');
-            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6Busca) return valor;
+            if (numKey.length >= 8 && numKey.slice(-8) === ultimos8Busca) return valor;
         }
         return undefined;
     }
@@ -465,11 +465,11 @@ export class BaileysProvider implements WhatsAppProvider {
         const direto = this.contextCache.get(jidBusca);
         if (direto) return { key: jidBusca, ctx: direto };
         const numBusca = jidBusca.split('@')[0].replace(/\D/g, '');
-        if (numBusca.length < 6) return undefined;
-        const ultimos6 = numBusca.slice(-6);
+        if (numBusca.length < 8) return undefined;
+        const ultimos8 = numBusca.slice(-8);
         for (const [key, ctx] of this.contextCache.entries()) {
             const numKey = key.split('@')[0].replace(/\D/g, '');
-            if (numKey.length >= 6 && numKey.slice(-6) === ultimos6) return { key, ctx };
+            if (numKey.length >= 8 && numKey.slice(-8) === ultimos8) return { key, ctx };
         }
         return undefined;
     }
@@ -679,10 +679,10 @@ D. consultar_status_pedido retornou uma resposta E o cliente insiste pela segund
             if (!pedidosRaw?.length) return { status: 'NAO_ENCONTRADO' };
             const pedidos = pedidosRaw.map((p: any) => JSON.parse(p.dados_json));
 
-            const ultimos6 = jidNumber.slice(-6);
+            const ultimos8 = jidNumber.slice(-8);
             const pedidosDoCliente = pedidos.filter((p: any) => {
                 const realNumber = (p.telefone || '').replace(/\D/g, '');
-                return realNumber.length >= 6 && ultimos6 === realNumber.slice(-6);
+                return realNumber.length >= 8 && ultimos8 === realNumber.slice(-8);
             });
 
             if (!pedidosDoCliente.length) return { status: 'NAO_ENCONTRADO' };

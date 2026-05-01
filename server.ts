@@ -429,7 +429,7 @@ export async function startServer() {
         }
         await broadcastLog('FINANCEIRO', 'Acerto de motoboy liquidado com sucesso.');
 
-        await atualizarCamposMotoboy(telegram_id, { status: 'aguardando_confirmacao' });
+        await atualizarCamposMotoboy(telegram_id, { status: 'AGUARDANDO_CONFIRMACAO' });
 
         const motoboy = await getMotoboyByTelegramId(telegram_id);
         if (motoboy?.telegram_id) {
@@ -1290,7 +1290,7 @@ async function aceitar(){
             // Dreana eventos de pagamento (chave 'pgto_<telegram_id>') de motoboys aguardando confirmação
             try {
                 const fleet = await getFleet();
-                const aguardandoPgto = fleet.filter((m: any) => m.status === 'aguardando_confirmacao' && m.vinculo === 'Nuvem');
+                const aguardandoPgto = fleet.filter((m: any) => m.status === 'AGUARDANDO_CONFIRMACAO' && m.vinculo === 'Nuvem');
                 for (const moto of aguardandoPgto) {
                     try {
                         const { data } = await hubFetch(`/rota/mensagens-pendentes?pacote_id=${encodeURIComponent('pgto_' + moto.telegram_id)}`);
