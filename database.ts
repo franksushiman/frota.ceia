@@ -327,7 +327,7 @@ export async function getExtratoFinanceiro(telegram_id: string) {
     });
 
     return {
-        qtd: entregas.length,
+        qtd: entregas.filter(e => (e.valor_entrega || 0) > 0).length,
         total_entregas,
         total_deslocamento,
         total_geral: total_entregas + total_deslocamento
