@@ -32,7 +32,7 @@ setInterval(() => {
     for (const [t, d] of dispatchTokens) if (d.expiresAt < now) dispatchTokens.delete(t);
 }, 5 * 60 * 1000);
 
-import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, registrarDeslocamento, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
+import { initDatabase, getConfiguracoes, updateConfiguracoes, getFleet, limparRadarInativo, deletarMotoboy, atualizarMotoboy, atualizarCamposMotoboy, upsertFleet, getExtratoFinanceiro, zerarAcertoFinanceiro, registrarEntrega, registrarDeslocamento, fazerBackupBanco, getMotoboyByTelegramId, getPedidos, savePedido, deletePedido, clearPedidos, getPacotes, savePacote, deletePacote, clearPacotes, getZonas, saveZona, deleteZona, clearZonas, getJwtSecret, contarUsuarios, criarUsuario, getUsuarioPorWhatsapp, atualizarSenhaUsuario, atualizarCodigoRecuperacao, getCodigoRecuperacaoHash, inserirHistoricoMotoboy, getHistoricoMotoboy, getNosParceiros, saveNoParceiro, deleteNoParceiro, getMotoboysOnline, limparParceirosNuvemExpirados, gerarTokenCadastro } from './database';
 import { iniciarWhatsApp, trocarNumeroWhatsApp, qrCodeBase64, sessionStatus, enviarMensagemWhatsApp, setClienteSAC, traduzirMotoboyParaCliente, isIgnorar } from './whatsapp/index';
 import { iniciarTelegram, enviarConviteRotaTelegram, enviarMensagemTelegram, repassarConviteNuvem, enviarConfirmacaoPagamento, iniciarChatOperador } from './telegramBot';
 import { initLogger, broadcastLog, broadcastMessage } from './logger';
@@ -60,6 +60,37 @@ async function hubFetch(path: string, init: RequestInit = {}): Promise<{ ok: boo
 }
 
 export const app: FastifyInstance = Fastify({ logger: false });
+
+// ── Hub health check ──────────────────────────────────────────────
+let hubOnline = true;
+let ultimoHubCheck = Date.now();
+setInterval(async () => {
+    try {
+        await hubFetch('/rota/status?pacote_id=__healthcheck__');
+        hubOnline = true;
+    } catch (e: any) {
+        if (e?.message?.includes('404') || e?.message?.includes('Rota não encontrada')) {
+            hubOnline = true;
+        } else {
+            hubOnline = false;
+        }
+    }
+    ultimoHubCheck = Date.now();
+}, 30000);
+
+// ── Backup diário às 4h ───────────────────────────────────────────
+setInterval(async () => {
+    const agora = new Date();
+    if (agora.getHours() === 4 && agora.getMinutes() < 5) {
+        const config = await getConfiguracoes();
+        const destino = config?.backup_path;
+        if (destino) {
+            const r = await fazerBackupBanco(destino);
+            if (r.ok) console.log('[BACKUP] Backup automático criado:', r.arquivo);
+            else console.error('[BACKUP] Falha:', r.erro);
+        }
+    }
+}, 5 * 60 * 1000);
 
 async function processarMensagensNuvem(mensagens: any[]): Promise<number> {
     let processadas = 0;
@@ -456,6 +487,25 @@ export async function startServer() {
         if (!telegram_id) return reply.code(400).send({ error: 'telegram_id é obrigatório.' });
         await atualizarCamposMotoboy(telegram_id, { status: 'OFFLINE', pagamento_pendente: 1 });
         await broadcastLog('FINANCEIRO', `Confirmação de pagamento cancelada manualmente. Motoboy ${telegram_id} permanece com pagamento pendente.`);
+        return reply.send({ ok: true });
+    });
+
+    app.get('/api/hub/status', async (_request, reply) => {
+        return reply.send({ online: hubOnline, ultimo_check: ultimoHubCheck });
+    });
+
+    app.get('/api/backup/agora', async (_request, reply) => {
+        const config = await getConfiguracoes();
+        const destino = config?.backup_path;
+        if (!destino) return reply.code(400).send({ error: 'Pasta de backup não configurada.' });
+        const r = await fazerBackupBanco(destino);
+        return reply.send(r);
+    });
+
+    app.post('/api/backup/configurar', async (request: any, reply) => {
+        const { backup_path } = request.body || {};
+        if (!backup_path) return reply.code(400).send({ error: 'backup_path é obrigatório.' });
+        await updateConfiguracoes({ backup_path });
         return reply.send({ ok: true });
     });
 

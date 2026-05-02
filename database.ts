@@ -117,6 +117,7 @@ export async function initDatabase(): Promise<Database> {
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN meta_phone_number_id TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN documento TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE configuracoes ADD COLUMN whatsapp_ativo INTEGER DEFAULT 1;'); } catch (e) {}
+        try { await database.exec('ALTER TABLE configuracoes ADD COLUMN backup_path TEXT;'); } catch (e) {}
         try { await database.exec('ALTER TABLE usuarios ADD COLUMN codigo_recuperacao_hash TEXT;'); } catch (e) {}
 
         await database.exec('CREATE TABLE IF NOT EXISTS tokens_cadastro (token TEXT PRIMARY KEY, usado INTEGER DEFAULT 0, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP)');
@@ -174,7 +175,8 @@ export async function updateConfiguracoes(dados: any) {
             meta_phone_number_id= COALESCE(?, meta_phone_number_id),
             whatsapp_ativo      = COALESCE(?, whatsapp_ativo),
             lat                 = COALESCE(?, lat),
-            lng                 = COALESCE(?, lng)
+            lng                 = COALESCE(?, lng),
+            backup_path         = COALESCE(?, backup_path)
         WHERE id = 1
     `;
 
@@ -193,6 +195,7 @@ export async function updateConfiguracoes(dados: any) {
     // 13  whatsapp_ativo
     // 14  lat
     // 15  lng
+    // 16  backup_path
     await database.run(query, [
         dados.nome               || null,                                             //  1
         dados.documento          || null,                                             //  2
@@ -209,6 +212,7 @@ export async function updateConfiguracoes(dados: any) {
         dados.whatsapp_ativo !== undefined ? (dados.whatsapp_ativo ? 1 : 0) : null,  // 13
         dados.lat  || null,                                                           // 14
         dados.lng  || null,                                                           // 15
+        dados.backup_path        || null,                                             // 16
     ]);
 }
 
@@ -311,6 +315,27 @@ export async function registrarDeslocamento(telegram_id: string, taxa_deslocamen
         "INSERT INTO entregas (telegram_id, valor_entrega, distancia_km, taxa_deslocamento, status, data) VALUES (?, ?, ?, ?, 'PENDENTE', ?)",
         telegram_id, 0, distancia_km, taxa_deslocamento, new Date().toISOString()
     );
+}
+
+export async function fazerBackupBanco(destino: string): Promise<{ ok: boolean; arquivo?: string; erro?: string }> {
+    try {
+        const fs = await import('fs/promises');
+        const pathMod = await import('path');
+        await fs.mkdir(destino, { recursive: true });
+        const data = new Date().toISOString().replace(/[:.]/g, '-');
+        const arquivo = pathMod.join(destino, `backup-${data}.sqlite`);
+        await fs.copyFile(dbPath, arquivo);
+        const arquivos = (await fs.readdir(destino))
+            .filter((f: string) => f.startsWith('backup-') && f.endsWith('.sqlite'))
+            .sort()
+            .reverse();
+        for (let i = 7; i < arquivos.length; i++) {
+            await fs.unlink(pathMod.join(destino, arquivos[i]));
+        }
+        return { ok: true, arquivo };
+    } catch (e: any) {
+        return { ok: false, erro: e?.message };
+    }
 }
 
 export async function getExtratoFinanceiro(telegram_id: string) {

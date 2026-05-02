@@ -138,6 +138,8 @@
 </head>
 <body>
 
+    <div id="hub-indicator" style="position:fixed; top:10px; right:10px; padding:6px 12px; border-radius:20px; font-size:0.75rem; font-weight:600; z-index:9999; display:none;"></div>
+
     <div id="login-overlay">
         <div class="login-card">
             <div class="login-logo">frota<span class="logo-dot">.</span>ceia</div>
@@ -391,6 +393,16 @@
                 </div>
 
                 <button id="btn-salvar-perfil" class="btn" style="margin-top: 16px;" onclick="salvarPerfil()">Gravar Base</button>
+
+                <div style="margin: 16px 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <label style="display:block; font-weight:600; margin-bottom:6px;">📦 Pasta de Backup Automático</label>
+                    <input id="backup-path" type="text" placeholder="/home/usuario/backups-ceia" style="width:100%; padding:8px; box-sizing:border-box;">
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        <button onclick="salvarBackupPath()" class="btn-create" style="background:#10b981;">Salvar</button>
+                        <button onclick="backupAgora()" class="btn-create" style="background:#3b82f6;">📥 Fazer backup agora</button>
+                    </div>
+                    <small style="color:#6b7280; display:block; margin-top:6px;">Backup diário automático às 4h. Mantém os 7 mais recentes.</small>
+                </div>
             </div>
 
             <div class="card">
@@ -2403,6 +2415,8 @@
                 setChaveSegura('prof-telegram-token', d.telegram_bot_token);
                 setChaveSegura('prof-google-maps-key', d.google_maps_key);
                 setChaveSegura('prof-openai-key', d.openai_key);
+                const bpEl = document.getElementById('backup-path');
+                if (bpEl) bpEl.value = d.backup_path || '';
 
                 // Kill switch: ativo por padrão (null/undefined = ligado)
                 const wppAtivo = d.whatsapp_ativo === undefined || d.whatsapp_ativo === null || d.whatsapp_ativo === 1 || d.whatsapp_ativo === true;
@@ -2428,6 +2442,46 @@
                 console.error('Erro ao preencher formulário:', e);
                 showToast('Não foi possível carregar os dados do QG Logístico.', 'error');
             }
+        }
+
+        async function checarHub() {
+            try {
+                const res = await fetch('/api/hub/status');
+                const data = await res.json();
+                const ind = document.getElementById('hub-indicator');
+                if (!ind) return;
+                if (data.online) {
+                    ind.style.display = 'none';
+                } else {
+                    ind.style.display = 'block';
+                    ind.style.background = '#fef2f2';
+                    ind.style.border = '1px solid #dc2626';
+                    ind.style.color = '#dc2626';
+                    ind.textContent = '⚠ Hub Nuvem indisponível — motoboy parceiro temporariamente offline';
+                }
+            } catch(e) {}
+        }
+        setInterval(checarHub, 60000);
+        window.addEventListener('load', () => setTimeout(checarHub, 3000));
+
+        async function salvarBackupPath() {
+            const el = document.getElementById('backup-path');
+            const p = el ? el.value.trim() : '';
+            if (!p) return showToast('Informe a pasta.', 'error');
+            const res = await fetch('/api/backup/configurar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ backup_path: p })
+            });
+            if (res.ok) showToast('Pasta de backup salva!', 'success');
+            else showToast('Erro ao salvar.', 'error');
+        }
+
+        async function backupAgora() {
+            const res = await fetch('/api/backup/agora');
+            const data = await res.json();
+            if (data.ok) showToast(`Backup feito: ${data.arquivo}`, 'success');
+            else showToast(`Falha: ${data.erro}`, 'error');
         }
 
         window.onload = async () => {
