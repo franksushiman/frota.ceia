@@ -148,7 +148,7 @@ export class BaileysProvider implements WhatsAppProvider {
             auth: authState,
             version,
             logger: pino({ level: 'silent' }),
-            browser: Browsers.macOS('Desktop'),
+            browser: ['CEIA Frota', 'Chrome', '1.0.0'],
             syncFullHistory: false,
             getMessage: async () => undefined
         });
